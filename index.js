@@ -2,8 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
+const jwt = require('jsonwebtoken');
 
 dotenv.config();
 const app = express();
@@ -16,11 +15,11 @@ app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   console.log('Origin:', req.get('Origin'));
   console.log('User-Agent:', req.get('User-Agent'));
-  console.log('Cookie:', req.get('Cookie'));
+  console.log('Authorization header:', req.get('Authorization'));
   next();
 });
 
-// CORS настройки - ИСПРАВЛЕНО для Render
+// CORS настройки для JWT
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
@@ -33,7 +32,6 @@ const corsOptions = {
 
     console.log('CORS check - Origin:', origin);
     
-    // Разрешаем запросы без origin (Postman, мобильные приложения)
     if (!origin) {
       console.log('No origin - allowing');
       return callback(null, true);
@@ -43,7 +41,6 @@ const corsOptions = {
       console.log('Origin allowed:', origin);
       callback(null, true);
     } else {
-      // В development режиме разрешаем все
       if (process.env.NODE_ENV !== 'production') {
         console.log('Dev mode - allowing origin:', origin);
         callback(null, true);
@@ -64,13 +61,12 @@ const corsOptions = {
     'Cache-Control',
     'Pragma'
   ],
-  exposedHeaders: ['Set-Cookie'],
+  exposedHeaders: ['Authorization'],
   optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
 
-// Preflight для всех роутов
 app.options('*', (req, res) => {
   console.log('OPTIONS request for:', req.path);
   const origin = req.get('Origin');
@@ -86,37 +82,51 @@ app.options('*', (req, res) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Настройка сессий для Render - КРИТИЧЕСКИ ВАЖНО
-const sessionConfig = {
-  secret: process.env.SESSION_SECRET || 'your-super-secret-key-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  name: 'socialspace.sid', // Кастомное имя cookie
-  store: MongoStore.create({ 
-    mongoUrl: process.env.MONGO_URI,
-    touchAfter: 24 * 3600,
-    ttl: 24 * 60 * 60, // 24 hours
-    autoRemove: 'native'
-  }),
-  cookie: {
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure: process.env.NODE_ENV === 'production', // true для HTTPS
-    domain: process.env.NODE_ENV === 'production' ? undefined : undefined
+// JWT Middleware для проверки токенов
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  console.log('Auth check - Token present:', !!token);
+
+  if (!token) {
+    console.log('No token provided');
+    return res.status(401).json({ message: 'Access token required' });
   }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, user) => {
+    if (err) {
+      console.log('Token verification failed:', err.message);
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+
+    console.log('Token verified for user:', user);
+    req.user = user;
+    next();
+  });
 };
 
-console.log('Session config:', {
-  ...sessionConfig,
-  cookie: {
-    ...sessionConfig.cookie,
-    secure: sessionConfig.cookie.secure,
-    sameSite: sessionConfig.cookie.sameSite
-  }
-});
+// Функция для генерации JWT токенов
+const generateTokens = (user) => {
+  const payload = {
+    id: user._id || user.id,
+    username: user.username
+  };
 
-app.use(session(sessionConfig));
+  const accessToken = jwt.sign(
+    payload,
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: '15m' }
+  );
+
+  const refreshToken = jwt.sign(
+    payload,
+    process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret',
+    { expiresIn: '7d' }
+  );
+
+  return { accessToken, refreshToken };
+};
 
 // Middleware для добавления CORS заголовков
 app.use((req, res, next) => {
@@ -128,76 +138,75 @@ app.use((req, res, next) => {
   next();
 });
 
-// Отладка сессий
-app.use((req, res, next) => {
-  console.log('=== SESSION DEBUG ===');
-  console.log('Session ID:', req.sessionID);
-  console.log('Session exists:', !!req.session);
-  console.log('User in session:', req.session?.user);
-  console.log('Session store ready:', req.sessionStore.ready);
-  console.log('====================');
-  next();
-});
-
-// Тестовый роут для проверки сессий
-app.post('/api/test-session', (req, res) => {
-  console.log('Test session endpoint hit');
-  if (!req.session.testData) {
-    req.session.testData = { timestamp: new Date().toISOString() };
+// Роут для обновления токенов
+app.post('/api/auth/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+  
+  if (!refreshToken) {
+    return res.status(401).json({ message: 'Refresh token required' });
   }
-  res.json({
-    sessionId: req.sessionID,
-    testData: req.session.testData,
-    user: req.session.user
+
+  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret', (err, user) => {
+    if (err) {
+      console.log('Refresh token verification failed:', err.message);
+      return res.status(403).json({ message: 'Invalid refresh token' });
+    }
+
+    const tokens = generateTokens(user);
+    console.log('Tokens refreshed for user:', user.username);
+    
+    res.json({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: { id: user.id, username: user.username }
+    });
   });
 });
 
 // Роуты
-const postRoutes = require('./routes/posts');
-app.use('/api/posts', postRoutes);
-
-const userRoutes = require('./routes/users');
-app.use('/api/users', userRoutes);
-
-const followRoutes = require('./routes/follow');
-app.use('/api/follow', followRoutes);
-
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
 
-// Роут для проверки текущего пользователя
-app.get('/api/me', (req, res) => {
-  console.log('GET /api/me called');
-  console.log('Session ID:', req.sessionID);
-  console.log('Session data:', req.session);
-  console.log('User in session:', req.session?.user);
-  
-  if (req.session && req.session.user) {
-    res.json({ 
-      user: req.session.user,
-      sessionId: req.sessionID,
-      debug: {
-        hasSession: !!req.session,
-        sessionKeys: Object.keys(req.session || {})
-      }
-    });
-  } else {
-    res.status(401).json({ 
-      message: 'Not logged in',
-      sessionId: req.sessionID,
-      debug: {
-        hasSession: !!req.session,
-        sessionKeys: Object.keys(req.session || {}),
-        cookies: req.get('Cookie')
-      }
-    });
+// Создаем модифицированные роуты с JWT
+const postRoutes = require('./routes/posts');
+const userRoutes = require('./routes/users');
+const followRoutes = require('./routes/follow');
+
+// Middleware для преобразования JWT в req.session.user для совместимости
+const jwtToSession = (req, res, next) => {
+  if (req.user) {
+    req.session = { user: req.user };
   }
+  next();
+};
+
+app.use('/api/posts', authenticateToken, jwtToSession, postRoutes);
+app.use('/api/users', authenticateToken, jwtToSession, userRoutes);
+app.use('/api/follow', authenticateToken, jwtToSession, followRoutes);
+
+// Роут для проверки текущего пользователя с JWT
+app.get('/api/me', authenticateToken, (req, res) => {
+  console.log('GET /api/me called with JWT');
+  console.log('User from token:', req.user);
+  
+  res.json({ 
+    user: req.user,
+    tokenValid: true
+  });
 });
 
-// Health check с подробной информацией
+// Тестовый роут для проверки JWT
+app.get('/api/test-auth', authenticateToken, (req, res) => {
+  res.json({
+    message: 'JWT authentication working',
+    user: req.user,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check
 app.get('/api/health', async (req, res) => {
   try {
-    // Проверяем соединение с MongoDB
     const dbState = mongoose.connection.readyState;
     const dbStatus = ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState];
     
@@ -209,15 +218,13 @@ app.get('/api/health', async (req, res) => {
         status: dbStatus,
         readyState: dbState
       },
-      session: {
-        id: req.sessionID,
-        hasUser: !!req.session?.user,
-        storeReady: req.sessionStore?.ready || false
+      auth: {
+        type: 'JWT',
+        hasAuthHeader: !!req.get('Authorization')
       },
       cors: {
         origin: req.get('Origin'),
-        userAgent: req.get('User-Agent'),
-        cookie: req.get('Cookie')
+        userAgent: req.get('User-Agent')
       }
     });
   } catch (error) {
@@ -231,17 +238,20 @@ app.get('/api/health', async (req, res) => {
 // Базовый роут
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Social Space API is running on Render!', 
+    message: 'Social Space API with JWT Auth!', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
+    auth: 'JWT Bearer Token',
     endpoints: [
-      '/api/posts',
-      '/api/users', 
-      '/api/follow',
-      '/api/auth',
-      '/api/me',
-      '/api/health',
-      '/api/test-session'
+      'POST /api/auth/login',
+      'POST /api/auth/register', 
+      'POST /api/auth/refresh',
+      'GET  /api/me',
+      'GET  /api/posts',
+      'POST /api/posts',
+      'GET  /api/users/search',
+      'GET  /api/health',
+      'GET  /api/test-auth'
     ]
   });
 });
@@ -253,18 +263,13 @@ app.use((err, req, res, next) => {
     stack: err.stack,
     url: req.url,
     method: req.method,
-    origin: req.get('Origin'),
-    userAgent: req.get('User-Agent')
+    origin: req.get('Origin')
   });
   
   if (err.message === 'Not allowed by CORS') {
     res.status(403).json({ 
       error: 'CORS policy violation',
-      origin: req.get('Origin'),
-      allowed: [
-        'https://social-space-3pce.vercel.app',
-        'http://localhost:3000'
-      ]
+      origin: req.get('Origin')
     });
   } else {
     res.status(500).json({ 
@@ -276,7 +281,6 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use('*', (req, res) => {
-  console.log('404 - Route not found:', req.method, req.originalUrl);
   res.status(404).json({ 
     error: 'Route not found',
     path: req.originalUrl,
@@ -290,59 +294,28 @@ mongoose.connect(process.env.MONGO_URI, {
   useUnifiedTopology: true
 }).then(() => {
   console.log('✅ MongoDB connected successfully');
-  console.log('Database name:', mongoose.connection.name);
 }).catch(err => {
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);
 });
 
-// Обработка событий MongoDB
-mongoose.connection.on('error', err => {
-  console.error('MongoDB error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected');
-});
-
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
-  try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed');
-    process.exit(0);
-  } catch (err) {
-    console.error('Error during shutdown:', err);
-    process.exit(1);
-  }
-});
-
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down...');
-  try {
-    await mongoose.connection.close();
-    process.exit(0);
-  } catch (err) {
-    console.error('Error during shutdown:', err);
-    process.exit(1);
-  }
+  await mongoose.connection.close();
+  process.exit(0);
 });
 
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Access: https://your-app.onrender.com`);
-  console.log('🔧 Debug endpoints:');
-  console.log('   - GET  /api/health');
-  console.log('   - POST /api/test-session');
-  console.log('   - GET  /api/me');
-});
-
-server.on('error', (err) => {
-  console.error('Server error:', err);
+  console.log(`🔐 Auth: JWT Bearer Token`);
+  console.log('🔧 Key endpoints:');
+  console.log('   - POST /api/auth/login');
+  console.log('   - POST /api/auth/refresh');
+  console.log('   - GET  /api/me (with Bearer token)');
 });
 
 module.exports = app;
