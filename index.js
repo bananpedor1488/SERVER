@@ -49,7 +49,7 @@ const corsOptions = {
       }
     }
   },
-  credentials: true,
+  credentials: false, // Убираем credentials для JWT
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
@@ -75,7 +75,7 @@ app.options('*', (req, res) => {
   }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Cache-Control,Pragma');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Credentials', 'false'); // Убираем credentials
   res.sendStatus(200);
 });
 
@@ -91,13 +91,29 @@ const authenticateToken = (req, res, next) => {
 
   if (!token) {
     console.log('No token provided');
-    return res.status(401).json({ message: 'Access token required' });
+    return res.status(401).json({ 
+      message: 'Access token required',
+      authenticated: false 
+    });
   }
 
   jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, user) => {
     if (err) {
       console.log('Token verification failed:', err.message);
-      return res.status(403).json({ message: 'Invalid or expired token' });
+      
+      // Если токен истек, возвращаем специальный код
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          message: 'Token expired',
+          expired: true,
+          authenticated: false 
+        });
+      }
+      
+      return res.status(403).json({ 
+        message: 'Invalid token',
+        authenticated: false 
+      });
     }
 
     console.log('Token verified for user:', user.username);
@@ -112,7 +128,7 @@ app.use((req, res, next) => {
   if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
   }
-  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Credentials', 'false'); // Убираем credentials
   next();
 });
 
@@ -143,7 +159,12 @@ app.get('/api/me', authenticateToken, (req, res) => {
   console.log('User from token:', req.user);
   
   res.json({ 
-    user: req.user,
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      email: req.user.email
+    },
+    authenticated: true,
     tokenValid: true
   });
 });
@@ -153,7 +174,8 @@ app.get('/api/test-auth', authenticateToken, (req, res) => {
   res.json({
     message: 'JWT authentication working',
     user: req.user,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    authenticated: true
   });
 });
 
@@ -172,7 +194,7 @@ app.get('/api/health', async (req, res) => {
         readyState: dbState
       },
       auth: {
-        type: 'JWT',
+        type: 'JWT Bearer Token',
         hasAuthHeader: !!req.get('Authorization')
       },
       cors: {
@@ -188,25 +210,35 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Роут для выхода (очистка токенов на клиенте)
+app.post('/api/logout', (req, res) => {
+  console.log('Logout request - JWT tokens should be removed on client side');
+  res.json({ 
+    message: 'Logged out successfully',
+    authenticated: false 
+  });
+});
+
 // Базовый роут
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Social Space API with JWT Auth!', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    auth: 'JWT Bearer Token',
+    auth: 'JWT Bearer Token (send in Authorization header)',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/register', 
       'POST /api/auth/refresh',
       'POST /api/auth/logout',
       'GET  /api/auth/status',
-      'GET  /api/me',
-      'GET  /api/posts',
-      'POST /api/posts',
-      'GET  /api/users/search',
+      'GET  /api/me (requires Bearer token)',
+      'GET  /api/posts (requires Bearer token)',
+      'POST /api/posts (requires Bearer token)',
+      'GET  /api/users/search (requires Bearer token)',
+      'POST /api/logout',
       'GET  /api/health',
-      'GET  /api/test-auth'
+      'GET  /api/test-auth (requires Bearer token)'
     ]
   });
 });
@@ -272,6 +304,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('   - POST /api/auth/register');
   console.log('   - POST /api/auth/refresh');
   console.log('   - GET  /api/me (with Bearer token)');
+  console.log('   - GET  /api/test-auth (with Bearer token)');
 });
 
 module.exports = app;
