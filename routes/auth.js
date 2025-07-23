@@ -1,40 +1,37 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const router = express.Router();
 
-// Middleware для логирования авторизации
+// Функция для генерации JWT токенов
+const generateTokens = (user) => {
+  const payload = {
+    id: user._id.toString(),
+    username: user.username,
+    email: user.email
+  };
+
+  const accessToken = jwt.sign(
+    payload,
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: '15m' }
+  );
+
+  const refreshToken = jwt.sign(
+    payload,
+    process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret',
+    { expiresIn: '7d' }
+  );
+
+  return { accessToken, refreshToken };
+};
+
+// Middleware для логирования
 router.use((req, res, next) => {
   console.log(`AUTH: ${req.method} ${req.path}`);
-  console.log('Session ID:', req.sessionID);
-  console.log('Current user:', req.session?.user);
+  console.log('Body:', req.body);
   next();
-});
-
-// Logout
-router.post('/logout', (req, res) => {
-  console.log('Logout attempt for user:', req.session?.user);
-  
-  if (req.session) {
-    req.session.destroy((err) => {
-      if (err) {
-        console.error('Session destroy error:', err);
-        return res.status(500).json({ message: 'Logout failed' });
-      }
-      
-      // Очищаем cookie
-      res.clearCookie('socialspace.sid', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-      });
-      
-      console.log('User logged out successfully');
-      res.json({ message: 'Logged out successfully' });
-    });
-  } else {
-    res.json({ message: 'Already logged out' });
-  }
 });
 
 // Register
@@ -62,24 +59,20 @@ router.post('/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ username, email, password: hash });
     
-    // Создаем сессию
-    req.session.user = { 
-      id: user._id.toString(), 
-      username: user.username 
-    };
+    // Генерируем JWT токены
+    const tokens = generateTokens(user);
     
-    // Сохраняем сессию принудительно
-    req.session.save((err) => {
-      if (err) {
-        console.error('Session save error:', err);
-        return res.status(500).json({ message: 'Registration successful but session error' });
+    console.log('User registered successfully:', user.username);
+    
+    res.status(201).json({ 
+      message: 'Registration successful',
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email
       }
-      
-      console.log('User registered and session created:', req.session.user);
-      res.status(201).json({ 
-        user: req.session.user,
-        sessionId: req.sessionID
-      });
     });
     
   } catch (error) {
@@ -114,26 +107,20 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Создаем сессию
-    req.session.user = { 
-      id: user._id.toString(), 
-      username: user.username 
-    };
+    // Генерируем JWT токены
+    const tokens = generateTokens(user);
     
-    // Принудительно сохраняем сессию
-    req.session.save((err) => {
-      if (err) {
-        console.error('Session save error during login:', err);
-        return res.status(500).json({ message: 'Login successful but session error' });
+    console.log('User logged in successfully:', user.username);
+    
+    res.json({ 
+      message: 'Login successful',
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email
       }
-      
-      console.log('User logged in successfully:', req.session.user);
-      console.log('Session ID:', req.sessionID);
-      
-      res.json({ 
-        user: req.session.user,
-        sessionId: req.sessionID
-      });
     });
     
   } catch (error) {
@@ -142,24 +129,64 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Check session status
-router.get('/status', (req, res) => {
-  console.log('Auth status check');
-  console.log('Session ID:', req.sessionID);
-  console.log('User in session:', req.session?.user);
+// Refresh tokens
+router.post('/refresh', (req, res) => {
+  const { refreshToken } = req.body;
   
-  if (req.session && req.session.user) {
+  if (!refreshToken) {
+    return res.status(401).json({ message: 'Refresh token required' });
+  }
+
+  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret', (err, user) => {
+    if (err) {
+      console.log('Refresh token verification failed:', err.message);
+      return res.status(403).json({ message: 'Invalid refresh token' });
+    }
+
+    const tokens = generateTokens(user);
+    console.log('Tokens refreshed for user:', user.username);
+    
+    res.json({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: { 
+        id: user.id, 
+        username: user.username,
+        email: user.email
+      }
+    });
+  });
+});
+
+// Logout (опциональный - для JWT просто удаляем токены на клиенте)
+router.post('/logout', (req, res) => {
+  console.log('Logout request - JWT tokens should be removed on client side');
+  res.json({ message: 'Logged out successfully' });
+});
+
+// Check auth status
+router.get('/status', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.json({ authenticated: false });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, user) => {
+    if (err) {
+      return res.json({ authenticated: false });
+    }
+    
     res.json({ 
       authenticated: true, 
-      user: req.session.user,
-      sessionId: req.sessionID
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
     });
-  } else {
-    res.json({ 
-      authenticated: false,
-      sessionId: req.sessionID
-    });
-  }
+  });
 });
 
 module.exports = router;

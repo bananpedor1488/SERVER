@@ -14,8 +14,7 @@ app.set('trust proxy', 1);
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   console.log('Origin:', req.get('Origin'));
-  console.log('User-Agent:', req.get('User-Agent'));
-  console.log('Authorization header:', req.get('Authorization'));
+  console.log('Authorization header:', req.get('Authorization') ? 'Present' : 'Missing');
   next();
 });
 
@@ -67,6 +66,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Preflight requests
 app.options('*', (req, res) => {
   console.log('OPTIONS request for:', req.path);
   const origin = req.get('Origin');
@@ -100,32 +100,10 @@ const authenticateToken = (req, res, next) => {
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
 
-    console.log('Token verified for user:', user);
+    console.log('Token verified for user:', user.username);
     req.user = user;
     next();
   });
-};
-
-// Функция для генерации JWT токенов
-const generateTokens = (user) => {
-  const payload = {
-    id: user._id || user.id,
-    username: user.username
-  };
-
-  const accessToken = jwt.sign(
-    payload,
-    process.env.JWT_SECRET || 'fallback-secret',
-    { expiresIn: '15m' }
-  );
-
-  const refreshToken = jwt.sign(
-    payload,
-    process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret',
-    { expiresIn: '7d' }
-  );
-
-  return { accessToken, refreshToken };
 };
 
 // Middleware для добавления CORS заголовков
@@ -138,41 +116,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Роут для обновления токенов
-app.post('/api/auth/refresh', (req, res) => {
-  const { refreshToken } = req.body;
-  
-  if (!refreshToken) {
-    return res.status(401).json({ message: 'Refresh token required' });
-  }
-
-  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret', (err, user) => {
-    if (err) {
-      console.log('Refresh token verification failed:', err.message);
-      return res.status(403).json({ message: 'Invalid refresh token' });
-    }
-
-    const tokens = generateTokens(user);
-    console.log('Tokens refreshed for user:', user.username);
-    
-    res.json({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      user: { id: user.id, username: user.username }
-    });
-  });
-});
-
-// Роуты
+// Роуты аутентификации (без middleware)
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
 
-// Создаем модифицированные роуты с JWT
+// Защищенные роуты (с JWT middleware)
 const postRoutes = require('./routes/posts');
 const userRoutes = require('./routes/users');
 const followRoutes = require('./routes/follow');
 
-// Middleware для преобразования JWT в req.session.user для совместимости
+// Middleware для преобразования JWT в req.session.user для совместимости со старым кодом
 const jwtToSession = (req, res, next) => {
   if (req.user) {
     req.session = { user: req.user };
@@ -246,6 +199,8 @@ app.get('/', (req, res) => {
       'POST /api/auth/login',
       'POST /api/auth/register', 
       'POST /api/auth/refresh',
+      'POST /api/auth/logout',
+      'GET  /api/auth/status',
       'GET  /api/me',
       'GET  /api/posts',
       'POST /api/posts',
@@ -314,6 +269,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔐 Auth: JWT Bearer Token`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
+  console.log('   - POST /api/auth/register');
   console.log('   - POST /api/auth/refresh');
   console.log('   - GET  /api/me (with Bearer token)');
 });
