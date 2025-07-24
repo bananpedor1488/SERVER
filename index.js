@@ -3,12 +3,33 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
 dotenv.config();
 const app = express();
+const server = createServer(app);
+
+// Socket.IO настройки с поддержкой JWT
+const io = new Server(server, {
+  cors: {
+    origin: [
+      'https://social-space-3pce.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173'
+    ],
+    methods: ["GET", "POST"],
+    credentials: false
+  }
+});
 
 // Trust proxy для Render
 app.set('trust proxy', 1);
+
+// Делаем io доступным для роутов
+app.set('io', io);
 
 // Улучшенное логирование
 app.use((req, res, next) => {
@@ -49,7 +70,7 @@ const corsOptions = {
       }
     }
   },
-  credentials: false, // Убираем credentials для JWT
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
@@ -75,7 +96,7 @@ app.options('*', (req, res) => {
   }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Cache-Control,Pragma');
-  res.header('Access-Control-Allow-Credentials', 'false'); // Убираем credentials
+  res.header('Access-Control-Allow-Credentials', 'false');
   res.sendStatus(200);
 });
 
@@ -85,7 +106,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // JWT Middleware для проверки токенов
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   console.log('Auth check - Token present:', !!token);
 
@@ -101,7 +122,6 @@ const authenticateToken = (req, res, next) => {
     if (err) {
       console.log('Token verification failed:', err.message);
       
-      // Если токен истек, возвращаем специальный код
       if (err.name === 'TokenExpiredError') {
         return res.status(401).json({ 
           message: 'Token expired',
@@ -122,13 +142,47 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Socket.IO JWT аутентификация
+const authenticateSocketToken = (socket, next) => {
+  const token = socket.handshake.auth.token;
+  
+  if (!token) {
+    return next(new Error('Authentication error - no token'));
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, user) => {
+    if (err) {
+      return next(new Error('Authentication error - invalid token'));
+    }
+    
+    socket.userId = user.id;
+    socket.username = user.username;
+    console.log(`Socket authenticated for user: ${user.username}`);
+    next();
+  });
+};
+
+// Socket.IO подключение
+io.use(authenticateSocketToken);
+
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.username} (${socket.userId})`);
+  
+  // Присоединяем пользователя к общей комнате
+  socket.join('posts');
+  
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.username}`);
+  });
+});
+
 // Middleware для добавления CORS заголовков
 app.use((req, res, next) => {
   const origin = req.get('Origin');
   if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
   }
-  res.header('Access-Control-Allow-Credentials', 'false'); // Убираем credentials
+  res.header('Access-Control-Allow-Credentials', 'false');
   next();
 });
 
@@ -200,6 +254,9 @@ app.get('/api/health', async (req, res) => {
       cors: {
         origin: req.get('Origin'),
         userAgent: req.get('User-Agent')
+      },
+      socketIO: {
+        connected: io.engine.clientsCount
       }
     });
   } catch (error) {
@@ -222,10 +279,11 @@ app.post('/api/logout', (req, res) => {
 // Базовый роут
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Social Space API with JWT Auth!', 
+    message: 'Social Space API with JWT Auth & Real-time updates!', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     auth: 'JWT Bearer Token (send in Authorization header)',
+    realtime: 'Socket.IO enabled',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/register', 
@@ -293,18 +351,20 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-// Запуск сервера
+// Запуск сервера с Socket.IO
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Auth: JWT Bearer Token`);
+  console.log(`⚡ Real-time: Socket.IO enabled`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
   console.log('   - POST /api/auth/register');
   console.log('   - POST /api/auth/refresh');
   console.log('   - GET  /api/me (with Bearer token)');
   console.log('   - GET  /api/test-auth (with Bearer token)');
+  console.log('   - Socket.IO: Real-time posts, likes, comments');
 });
 
 module.exports = app;
