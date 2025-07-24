@@ -3,9 +3,27 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
+const http = require('http');
+const socketIo = require('socket.io');
 
 dotenv.config();
 const app = express();
+const server = http.createServer(app);
+
+// Socket.IO настройка
+const io = socketIo(server, {
+  cors: {
+    origin: [
+      'https://social-space-3pce.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173'
+    ],
+    methods: ['GET', 'POST'],
+    credentials: false
+  }
+});
 
 // Trust proxy для Render
 app.set('trust proxy', 1);
@@ -49,7 +67,7 @@ const corsOptions = {
       }
     }
   },
-  credentials: false, // Убираем credentials для JWT
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
@@ -75,17 +93,54 @@ app.options('*', (req, res) => {
   }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Cache-Control,Pragma');
-  res.header('Access-Control-Allow-Credentials', 'false'); // Убираем credentials
+  res.header('Access-Control-Allow-Credentials', 'false');
   res.sendStatus(200);
 });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Middleware для авторизации Socket.IO
+const socketAuth = (socket, next) => {
+  const token = socket.handshake.auth.token;
+  
+  if (!token) {
+    return next(new Error('No token provided'));
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, user) => {
+    if (err) {
+      return next(new Error('Invalid token'));
+    }
+    socket.user = user;
+    next();
+  });
+};
+
+// Socket.IO обработчики
+io.use(socketAuth);
+
+io.on('connection', (socket) => {
+  console.log(`User ${socket.user.username} connected via Socket.IO`);
+  
+  // Присоединяемся к комнате пользователя
+  socket.join(`user_${socket.user.id}`);
+  
+  // Присоединяемся к общей комнате
+  socket.join('general');
+
+  socket.on('disconnect', () => {
+    console.log(`User ${socket.user.username} disconnected`);
+  });
+});
+
+// Делаем io доступным в роутах
+app.set('io', io);
+
 // JWT Middleware для проверки токенов
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   console.log('Auth check - Token present:', !!token);
 
@@ -101,7 +156,6 @@ const authenticateToken = (req, res, next) => {
     if (err) {
       console.log('Token verification failed:', err.message);
       
-      // Если токен истек, возвращаем специальный код
       if (err.name === 'TokenExpiredError') {
         return res.status(401).json({ 
           message: 'Token expired',
@@ -128,7 +182,7 @@ app.use((req, res, next) => {
   if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
   }
-  res.header('Access-Control-Allow-Credentials', 'false'); // Убираем credentials
+  res.header('Access-Control-Allow-Credentials', 'false');
   next();
 });
 
@@ -200,7 +254,8 @@ app.get('/api/health', async (req, res) => {
       cors: {
         origin: req.get('Origin'),
         userAgent: req.get('User-Agent')
-      }
+      },
+      socketConnections: io.sockets.sockets.size
     });
   } catch (error) {
     res.status(500).json({
@@ -222,10 +277,12 @@ app.post('/api/logout', (req, res) => {
 // Базовый роут
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Social Space API with JWT Auth!', 
+    message: 'Social Space API with JWT Auth and Socket.IO!', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     auth: 'JWT Bearer Token (send in Authorization header)',
+    realtime: 'Socket.IO enabled',
+    connectedUsers: io.sockets.sockets.size,
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/register', 
@@ -238,7 +295,8 @@ app.get('/', (req, res) => {
       'GET  /api/users/search (requires Bearer token)',
       'POST /api/logout',
       'GET  /api/health',
-      'GET  /api/test-auth (requires Bearer token)'
+      'GET  /api/test-auth (requires Bearer token)',
+      'Socket.IO: Real-time updates'
     ]
   });
 });
@@ -289,22 +347,25 @@ mongoose.connect(process.env.MONGO_URI, {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
+  io.close();
   await mongoose.connection.close();
   process.exit(0);
 });
 
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Auth: JWT Bearer Token`);
+  console.log(`⚡ Socket.IO: Enabled`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
   console.log('   - POST /api/auth/register');
   console.log('   - POST /api/auth/refresh');
   console.log('   - GET  /api/me (with Bearer token)');
   console.log('   - GET  /api/test-auth (with Bearer token)');
+  console.log('   - Socket.IO: Real-time updates');
 });
 
 module.exports = app;
