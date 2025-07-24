@@ -15,13 +15,13 @@ const generateTokens = (user) => {
   const accessToken = jwt.sign(
     payload,
     process.env.JWT_SECRET || 'fallback-secret',
-    { expiresIn: '15m' }
+    { expiresIn: '14d' }
   );
 
   const refreshToken = jwt.sign(
     payload,
     process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret',
-    { expiresIn: '7d' }
+    { expiresIn: '90d' }
   );
 
   return { accessToken, refreshToken };
