@@ -1,7 +1,8 @@
 const express = require('express');
 const Post = require('../models/Post');
-const router = express.Router();
+const Repost = require('../models/Repost');
 const Comment = require('../models/Comment');
+const router = express.Router();
 
 // Middleware проверки сессии
 const isAuth = (req, res, next) => {
@@ -9,16 +10,77 @@ const isAuth = (req, res, next) => {
   next();
 };
 
-// Получить все посты (сортированы по дате) с комментариями
+// Получить все посты (включая репосты) с комментариями
 router.get('/', isAuth, async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Получаем обычные посты
     const posts = await Post.find()
       .sort({ createdAt: -1 })
       .populate('author', 'username')
-      .lean(); // Используем lean для лучшей производительности
+      .lean();
+
+    // Получаем репосты
+    const reposts = await Repost.find()
+      .sort({ createdAt: -1 })
+      .populate('repostedBy', 'username')
+      .populate({
+        path: 'originalPost',
+        populate: {
+          path: 'author',
+          select: 'username'
+        }
+      })
+      .lean();
+
+    // Объединяем посты и репосты
+    const allItems = [];
+
+    // Добавляем обычные посты
+    posts.forEach(post => {
+      allItems.push({
+        ...post,
+        type: 'post',
+        sortDate: post.createdAt,
+        isRepost: false
+      });
+    });
+
+    // Добавляем репосты
+    reposts.forEach(repost => {
+      if (repost.originalPost) { // Проверяем, что оригинальный пост существует
+        allItems.push({
+          _id: repost._id,
+          type: 'repost',
+          sortDate: repost.createdAt,
+          isRepost: true,
+          originalPost: repost.originalPost,
+          repostedBy: repost.repostedBy,
+          createdAt: repost.createdAt
+        });
+      }
+    });
+
+    // Сортируем по дате создания
+    allItems.sort((a, b) => new Date(b.sortDate) - new Date(a.sortDate));
+
+    // Применяем пагинацию
+    const paginatedItems = allItems.slice(skip, skip + limit);
+
+    // Получаем ID всех постов (включая оригинальные посты из репостов)
+    const postIds = [];
+    paginatedItems.forEach(item => {
+      if (item.type === 'post') {
+        postIds.push(item._id);
+      } else if (item.type === 'repost' && item.originalPost) {
+        postIds.push(item.originalPost._id);
+      }
+    });
 
     // Получаем комментарии для всех постов одним запросом
-    const postIds = posts.map(post => post._id);
     const comments = await Comment.find({ post: { $in: postIds } })
       .sort({ createdAt: 1 })
       .populate('author', 'username')
@@ -34,14 +96,38 @@ router.get('/', isAuth, async (req, res) => {
       commentsByPost[postId].push(comment);
     });
 
-    // Добавляем комментарии к каждому посту
-    const postsWithComments = posts.map(post => ({
-      ...post,
-      comments: commentsByPost[post._id.toString()] || [],
-      commentsCount: (commentsByPost[post._id.toString()] || []).length
-    }));
+    // Форматируем результат
+    const formattedItems = paginatedItems.map(item => {
+      if (item.type === 'post') {
+        return {
+          ...item,
+          comments: commentsByPost[item._id.toString()] || [],
+          commentsCount: (commentsByPost[item._id.toString()] || []).length
+        };
+      } else {
+        // Это репост
+        const originalPostId = item.originalPost._id.toString();
+        return {
+          _id: item._id,
+          isRepost: true,
+          originalPost: {
+            ...item.originalPost,
+            comments: commentsByPost[originalPostId] || [],
+            commentsCount: (commentsByPost[originalPostId] || []).length
+          },
+          repostedBy: item.repostedBy,
+          createdAt: item.createdAt,
+          // Для совместимости с фронтендом
+          author: item.originalPost.author,
+          content: item.originalPost.content,
+          likes: item.originalPost.likes || [],
+          comments: commentsByPost[originalPostId] || [],
+          commentsCount: (commentsByPost[originalPostId] || []).length
+        };
+      }
+    });
 
-    res.json(postsWithComments);
+    res.json(formattedItems);
   } catch (error) {
     console.error('Error fetching posts:', error);
     res.status(500).json({ message: 'Error fetching posts' });
@@ -65,7 +151,8 @@ router.post('/', isAuth, async (req, res) => {
     const postWithComments = {
       ...populated.toJSON(),
       comments: [],
-      commentsCount: 0
+      commentsCount: 0,
+      isRepost: false
     };
 
     // Отправляем real-time обновление всем подключенным пользователям
@@ -76,6 +163,101 @@ router.post('/', isAuth, async (req, res) => {
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({ message: 'Error creating post' });
+  }
+});
+
+// Создать репост
+router.post('/:id/repost', isAuth, async (req, res) => {
+  try {
+    const originalPostId = req.params.id;
+    const userId = req.session.user.id;
+
+    // Проверяем, существует ли оригинальный пост
+    const originalPost = await Post.findById(originalPostId).populate('author', 'username');
+    if (!originalPost) {
+      return res.status(404).json({ message: 'Пост не найден' });
+    }
+
+    // Проверяем, не репостит ли пользователь свой собственный пост
+    if (originalPost.author._id.toString() === userId) {
+      return res.status(400).json({ message: 'Нельзя репостить свой собственный пост' });
+    }
+
+    // Проверяем, не репостил ли пользователь уже этот пост
+    const existingRepost = await Repost.findOne({
+      originalPost: originalPostId,
+      repostedBy: userId
+    });
+
+    if (existingRepost) {
+      return res.status(400).json({ message: 'Вы уже репостили этот пост' });
+    }
+
+    // Создаем репост
+    const repost = await Repost.create({
+      originalPost: originalPostId,
+      repostedBy: userId
+    });
+
+    // Получаем полную информацию о репосте
+    const populatedRepost = await Repost.findById(repost._id)
+      .populate('repostedBy', 'username')
+      .populate({
+        path: 'originalPost',
+        populate: {
+          path: 'author',
+          select: 'username'
+        }
+      });
+
+    // Формируем объект для отправки
+    const repostData = {
+      _id: populatedRepost._id,
+      isRepost: true,
+      originalPost: populatedRepost.originalPost,
+      repostedBy: populatedRepost.repostedBy,
+      createdAt: populatedRepost.createdAt
+    };
+
+    // Отправляем real-time обновление всем подключенным пользователям
+    const io = req.app.get('io');
+    io.to('posts').emit('newRepost', repostData);
+
+    res.status(201).json(repostData);
+  } catch (error) {
+    console.error('Error creating repost:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Вы уже репостили этот пост' });
+    }
+    res.status(500).json({ message: 'Error creating repost' });
+  }
+});
+
+// Удалить репост
+router.delete('/repost/:id', isAuth, async (req, res) => {
+  try {
+    const repost = await Repost.findById(req.params.id);
+    if (!repost) {
+      return res.status(404).json({ message: 'Репост не найден' });
+    }
+
+    // Проверяем, что пользователь может удалить репост (только автор)
+    if (repost.repostedBy.toString() !== req.session.user.id) {
+      return res.status(403).json({ message: 'Нет прав для удаления этого репоста' });
+    }
+
+    await Repost.findByIdAndDelete(req.params.id);
+
+    // Отправляем real-time обновление всем подключенным пользователям
+    const io = req.app.get('io');
+    io.to('posts').emit('postDeleted', {
+      postId: req.params.id
+    });
+
+    res.json({ message: 'Репост удален успешно' });
+  } catch (error) {
+    console.error('Error deleting repost:', error);
+    res.status(500).json({ message: 'Error deleting repost' });
   }
 });
 
@@ -163,7 +345,7 @@ router.post('/:id/like', isAuth, async (req, res) => {
   }
 });
 
-// Удалить пост (новый роут)
+// Удалить пост
 router.delete('/:id', isAuth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -176,6 +358,9 @@ router.delete('/:id', isAuth, async (req, res) => {
 
     // Удаляем все комментарии к посту
     await Comment.deleteMany({ post: post._id });
+    
+    // Удаляем все репосты этого поста
+    await Repost.deleteMany({ originalPost: post._id });
     
     // Удаляем сам пост
     await Post.findByIdAndDelete(req.params.id);
@@ -193,7 +378,7 @@ router.delete('/:id', isAuth, async (req, res) => {
   }
 });
 
-// Удалить комментарий (новый роут)
+// Удалить комментарий
 router.delete('/:postId/comment/:commentId', isAuth, async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);

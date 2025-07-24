@@ -10,6 +10,9 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 
+// Подключаем хуки для репостов
+const { initializeRepostHooks } = require('./utils/repostHooks');
+
 // Socket.IO настройки с поддержкой JWT
 const io = new Server(server, {
   cors: {
@@ -257,6 +260,12 @@ app.get('/api/health', async (req, res) => {
       },
       socketIO: {
         connected: io.engine.clientsCount
+      },
+      features: {
+        reposts: 'enabled',
+        realTimeUpdates: 'enabled',
+        comments: 'enabled',
+        likes: 'enabled'
       }
     });
   } catch (error) {
@@ -279,11 +288,20 @@ app.post('/api/logout', (req, res) => {
 // Базовый роут
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Social Space API with JWT Auth & Real-time updates!', 
+    message: 'Social Space API with JWT Auth, Real-time updates & Reposts!', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     auth: 'JWT Bearer Token (send in Authorization header)',
     realtime: 'Socket.IO enabled',
+    features: [
+      '✨ Репосты с отображением оригинального автора',
+      '🔄 Real-time уведомления',
+      '💬 Система комментариев',
+      '❤️ Лайки с анимацией',
+      '👥 Система подписок',
+      '🌙 Темная/светлая тема',
+      '📱 Адаптивный дизайн'
+    ],
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/register', 
@@ -293,7 +311,10 @@ app.get('/', (req, res) => {
       'GET  /api/me (requires Bearer token)',
       'GET  /api/posts (requires Bearer token)',
       'POST /api/posts (requires Bearer token)',
+      'POST /api/posts/:id/repost (requires Bearer token) - NEW!',
+      'DELETE /api/posts/repost/:id (requires Bearer token) - NEW!',
       'GET  /api/users/search (requires Bearer token)',
+      'GET  /api/users/suggestions (requires Bearer token)',
       'POST /api/logout',
       'GET  /api/health',
       'GET  /api/test-auth (requires Bearer token)'
@@ -339,6 +360,11 @@ mongoose.connect(process.env.MONGO_URI, {
   useUnifiedTopology: true
 }).then(() => {
   console.log('✅ MongoDB connected successfully');
+  
+  // Инициализируем хуки для репостов после подключения к БД
+  initializeRepostHooks();
+  console.log('✅ Repost hooks initialized');
+  
 }).catch(err => {
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);
@@ -358,13 +384,15 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Auth: JWT Bearer Token`);
   console.log(`⚡ Real-time: Socket.IO enabled`);
+  console.log(`🔄 Features: Reposts, Comments, Likes, Follows`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
   console.log('   - POST /api/auth/register');
   console.log('   - POST /api/auth/refresh');
   console.log('   - GET  /api/me (with Bearer token)');
   console.log('   - GET  /api/test-auth (with Bearer token)');
-  console.log('   - Socket.IO: Real-time posts, likes, comments');
+  console.log('   - POST /api/posts/:id/repost (NEW!)');
+  console.log('   - Socket.IO: Real-time posts, reposts, likes, comments');
 });
 
 module.exports = app;
