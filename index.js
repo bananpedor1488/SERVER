@@ -161,6 +161,8 @@ const authenticateSocketToken = (socket, next) => {
     socket.userId = user.id;
     socket.username = user.username;
     console.log(`Socket authenticated for user: ${user.username}`);
+    // Присоединяем пользователя к персональной комнате для чатов
+    socket.join(`user_${user.id}`);
     next();
   });
 };
@@ -171,7 +173,7 @@ io.use(authenticateSocketToken);
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.username} (${socket.userId})`);
   
-  // Присоединяем пользователя к общей комнате
+  // Присоединяем пользователя к общей комнате для постов
   socket.join('posts');
   
   socket.on('disconnect', () => {
@@ -197,6 +199,7 @@ app.use('/api/auth', authRoutes);
 const postRoutes = require('./routes/posts');
 const userRoutes = require('./routes/users');
 const followRoutes = require('./routes/follow');
+const messageRoutes = require('./routes/messages'); // Добавляем роуты для чата
 
 // Middleware для преобразования JWT в req.session.user для совместимости со старым кодом
 const jwtToSession = (req, res, next) => {
@@ -209,6 +212,7 @@ const jwtToSession = (req, res, next) => {
 app.use('/api/posts', authenticateToken, jwtToSession, postRoutes);
 app.use('/api/users', authenticateToken, jwtToSession, userRoutes);
 app.use('/api/follow', authenticateToken, jwtToSession, followRoutes);
+app.use('/api/messages', authenticateToken, jwtToSession, messageRoutes); // Добавляем роуты сообщений
 
 // Роут для проверки текущего пользователя с JWT
 app.get('/api/me', authenticateToken, (req, res) => {
@@ -265,7 +269,8 @@ app.get('/api/health', async (req, res) => {
         reposts: 'enabled',
         realTimeUpdates: 'enabled',
         comments: 'enabled',
-        likes: 'enabled'
+        likes: 'enabled',
+        chats: 'enabled' // Добавляем чаты в список фич
       }
     });
   } catch (error) {
@@ -288,7 +293,7 @@ app.post('/api/logout', (req, res) => {
 // Базовый роут
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Social Space API with JWT Auth, Real-time updates & Reposts!', 
+    message: 'Social Space API with JWT Auth, Real-time updates, Reposts & Chats!', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     auth: 'JWT Bearer Token (send in Authorization header)',
@@ -299,6 +304,7 @@ app.get('/', (req, res) => {
       '💬 Система комментариев',
       '❤️ Лайки с анимацией',
       '👥 Система подписок',
+      '💬 Приватные чаты', // Добавляем чаты
       '🌙 Темная/светлая тема',
       '📱 Адаптивный дизайн'
     ],
@@ -315,6 +321,13 @@ app.get('/', (req, res) => {
       'DELETE /api/posts/repost/:id (requires Bearer token) - NEW!',
       'GET  /api/users/search (requires Bearer token)',
       'GET  /api/users/suggestions (requires Bearer token)',
+      'GET  /api/messages/chats (requires Bearer token)', // Новый эндпоинт
+      'POST /api/messages/chats (requires Bearer token)', // Новый эндпоинт
+      'GET  /api/messages/chats/:chatId/messages (requires Bearer token)', // Новый эндпоинт
+      'POST /api/messages/chats/:chatId/messages (requires Bearer token)', // Новый эндпоинт
+      'PUT  /api/messages/chats/:chatId/read (requires Bearer token)', // Новый эндпоинт
+      'DELETE /api/messages/messages/:messageId (requires Bearer token)', // Новый эндпоинт
+      'GET  /api/messages/unread-count (requires Bearer token)', // Новый эндпоинт
       'POST /api/logout',
       'GET  /api/health',
       'GET  /api/test-auth (requires Bearer token)'
@@ -384,7 +397,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Auth: JWT Bearer Token`);
   console.log(`⚡ Real-time: Socket.IO enabled`);
-  console.log(`🔄 Features: Reposts, Comments, Likes, Follows`);
+  console.log(`🔄 Features: Reposts, Comments, Likes, Follows, Chats`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
   console.log('   - POST /api/auth/register');
@@ -392,7 +405,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('   - GET  /api/me (with Bearer token)');
   console.log('   - GET  /api/test-auth (with Bearer token)');
   console.log('   - POST /api/posts/:id/repost (NEW!)');
-  console.log('   - Socket.IO: Real-time posts, reposts, likes, comments');
+  console.log('   - GET  /api/messages/chats (NEW!)');
+  console.log('   - Socket.IO: Real-time posts, reposts, likes, comments, chats');
 });
 
 module.exports = app;
