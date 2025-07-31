@@ -217,11 +217,14 @@ router.post('/end/:callId', isAuth, async (req, res) => {
     const { callId } = req.params;
     const userId = req.session.user.id;
 
+    console.log(`Ending call ${callId} by user ${userId}`);
+
     const call = await Call.findById(callId)
       .populate('caller', 'username')
       .populate('callee', 'username');
 
     if (!call) {
+      console.log('Call not found, might be already ended');
       return res.status(404).json({ message: 'Call not found' });
     }
 
@@ -232,9 +235,8 @@ router.post('/end/:callId', isAuth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (!['pending', 'accepted'].includes(call.status)) {
-      return res.status(400).json({ message: 'Call cannot be ended' });
-    }
+    // Разрешаем завершение звонка в любом состоянии
+    console.log(`Call status before ending: ${call.status}`);
 
     // Рассчитываем продолжительность
     const endTime = new Date();
@@ -249,6 +251,8 @@ router.post('/end/:callId', isAuth, async (req, res) => {
     call.endedAt = endTime;
     call.duration = duration;
     await call.save();
+
+    console.log(`Call ${callId} ended successfully`);
 
     // Уведомляем обоих участников
     const io = req.app.get('io');
@@ -313,6 +317,8 @@ router.get('/active', isAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
 
+    console.log(`Checking active call for user ${userId}`);
+
     const activeCall = await Call.findOne({
       $or: [
         { caller: userId, status: { $in: ['pending', 'accepted'] } },
@@ -323,10 +329,45 @@ router.get('/active', isAuth, async (req, res) => {
     .populate('callee', 'username')
     .populate('chat');
 
+    if (activeCall) {
+      console.log(`Found active call: ${activeCall._id} with status ${activeCall.status}`);
+    } else {
+      console.log('No active call found');
+    }
+
     res.json(activeCall);
   } catch (error) {
     console.error('Error fetching active call:', error);
     res.status(500).json({ message: 'Error fetching active call' });
+  }
+});
+
+// Принудительно завершить все активные звонки пользователя
+router.post('/cleanup', isAuth, async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    
+    console.log(`Cleaning up all calls for user ${userId}`);
+    
+    const result = await Call.updateMany({
+      $or: [
+        { caller: userId, status: { $in: ['pending', 'accepted'] } },
+        { callee: userId, status: { $in: ['pending', 'accepted'] } }
+      ]
+    }, {
+      status: 'ended',
+      endedAt: new Date()
+    });
+    
+    console.log(`Cleaned up ${result.modifiedCount} calls`);
+    
+    res.json({ 
+      message: 'All calls cleaned up',
+      cleanedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Error cleaning up calls:', error);
+    res.status(500).json({ message: 'Error cleaning up calls' });
   }
 });
 

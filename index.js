@@ -178,7 +178,8 @@ io.on('connection', (socket) => {
 
   // Обработчик для печатания в чате
   socket.on('typing', ({ chatId, isTyping }) => {
-    socket.to(`user_${chatId}`).emit('userTyping', {
+    // Отправляем всем участникам чата, кроме отправителя
+    socket.broadcast.emit('userTyping', {
       chatId,
       userId: socket.userId,
       username: socket.username,
