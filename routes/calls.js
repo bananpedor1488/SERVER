@@ -347,8 +347,22 @@ router.post('/cleanup', isAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
     
-    console.log(`Cleaning up all calls for user ${userId}`);
+    // Сначала находим все зависшие звонки для логирования
+    const activeCallsToClean = await Call.find({
+      $or: [
+        { caller: userId, status: { $in: ['pending', 'accepted'] } },
+        { callee: userId, status: { $in: ['pending', 'accepted'] } }
+      ]
+    }).populate('caller', 'username').populate('callee', 'username');
+
+    if (activeCallsToClean.length > 0) {
+      console.log(`🧹 Cleanup for user ${userId}:`);
+      activeCallsToClean.forEach(call => {
+        console.log(`  - Call ${call._id}: ${call.caller.username} -> ${call.callee.username} (${call.status}, ${call.type})`);
+      });
+    }
     
+    // Обновляем статусы
     const result = await Call.updateMany({
       $or: [
         { caller: userId, status: { $in: ['pending', 'accepted'] } },
@@ -359,11 +373,18 @@ router.post('/cleanup', isAuth, async (req, res) => {
       endedAt: new Date()
     });
     
-    console.log(`Cleaned up ${result.modifiedCount} calls`);
+    console.log(`✅ Cleanup completed: ${result.modifiedCount} calls ended`);
     
     res.json({ 
-      message: 'All calls cleaned up',
-      cleanedCount: result.modifiedCount
+      message: result.modifiedCount > 0 ? 'Stuck calls cleaned up' : 'No stuck calls found',
+      cleanedCount: result.modifiedCount,
+      cleanedCalls: activeCallsToClean.map(call => ({
+        id: call._id,
+        from: call.caller.username,
+        to: call.callee.username,
+        status: call.status,
+        type: call.type
+      }))
     });
   } catch (error) {
     console.error('Error cleaning up calls:', error);

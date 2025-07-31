@@ -240,6 +240,32 @@ io.on('connection', (socket) => {
   
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.username}`);
+    
+    // Автоматически завершаем активные звонки при отключении пользователя
+    if (socket.userId) {
+      const Call = require('./models/Call');
+      Call.updateMany({
+        $or: [
+          { caller: socket.userId, status: { $in: ['pending', 'accepted'] } },
+          { callee: socket.userId, status: { $in: ['pending', 'accepted'] } }
+        ]
+      }, {
+        status: 'ended',
+        endedAt: new Date()
+      }).then(result => {
+        if (result.modifiedCount > 0) {
+          console.log(`🔌 Auto-ended ${result.modifiedCount} calls for disconnected user ${socket.username}`);
+          
+          // Уведомляем других участников о завершении звонка
+          socket.broadcast.emit('callEnded', { 
+            reason: 'user_disconnected',
+            username: socket.username 
+          });
+        }
+      }).catch(err => {
+        console.error('Error auto-ending calls on disconnect:', err);
+      });
+    }
   });
 });
 
