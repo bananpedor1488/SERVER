@@ -33,6 +33,25 @@ router.post('/initiate', isAuth, async (req, res) => {
       return res.status(400).json({ message: 'Callee not found' });
     }
 
+    // Проверяем, что пользователь не звонит сам себе
+    if (callerId === callee._id.toString()) {
+      return res.status(400).json({ message: 'Cannot call yourself' });
+    }
+
+    // Сначала очищаем старые "зависшие" звонки (старше 5 минут)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await Call.updateMany({
+      $or: [
+        { caller: callerId, status: 'pending', createdAt: { $lt: fiveMinutesAgo } },
+        { callee: callerId, status: 'pending', createdAt: { $lt: fiveMinutesAgo } },
+        { caller: callee._id, status: 'pending', createdAt: { $lt: fiveMinutesAgo } },
+        { callee: callee._id, status: 'pending', createdAt: { $lt: fiveMinutesAgo } }
+      ]
+    }, {
+      status: 'missed',
+      endedAt: new Date()
+    });
+
     // Проверяем, нет ли активного звонка
     const activeCall = await Call.findOne({
       $or: [
@@ -44,7 +63,12 @@ router.post('/initiate', isAuth, async (req, res) => {
     });
 
     if (activeCall) {
-      return res.status(409).json({ message: 'User is already in a call' });
+      console.log('Active call found:', activeCall);
+      return res.status(409).json({ 
+        message: 'User is already in a call',
+        activeCallId: activeCall._id,
+        status: activeCall.status
+      });
     }
 
     // Создаем новый звонок
