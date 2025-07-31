@@ -175,6 +175,67 @@ io.on('connection', (socket) => {
   
   // Присоединяем пользователя к общей комнате для постов
   socket.join('posts');
+
+  // Обработчик для печатания в чате
+  socket.on('typing', ({ chatId, isTyping }) => {
+    socket.to(`user_${chatId}`).emit('userTyping', {
+      chatId,
+      userId: socket.userId,
+      username: socket.username,
+      isTyping
+    });
+  });
+
+  // WebRTC Signaling для звонков
+  socket.on('webrtc-offer', ({ callId, offer, targetUserId }) => {
+    console.log(`WebRTC offer from ${socket.username} to user ${targetUserId}`);
+    socket.to(`user_${targetUserId}`).emit('webrtc-offer', {
+      callId,
+      offer,
+      fromUserId: socket.userId,
+      fromUsername: socket.username
+    });
+  });
+
+  socket.on('webrtc-answer', ({ callId, answer, targetUserId }) => {
+    console.log(`WebRTC answer from ${socket.username} to user ${targetUserId}`);
+    socket.to(`user_${targetUserId}`).emit('webrtc-answer', {
+      callId,
+      answer,
+      fromUserId: socket.userId,
+      fromUsername: socket.username
+    });
+  });
+
+  socket.on('webrtc-ice-candidate', ({ callId, candidate, targetUserId }) => {
+    console.log(`ICE candidate from ${socket.username} to user ${targetUserId}`);
+    socket.to(`user_${targetUserId}`).emit('webrtc-ice-candidate', {
+      callId,
+      candidate,
+      fromUserId: socket.userId,
+      fromUsername: socket.username
+    });
+  });
+
+  // Уведомление о включении/выключении микрофона
+  socket.on('call-audio-toggle', ({ callId, isAudioEnabled, targetUserId }) => {
+    socket.to(`user_${targetUserId}`).emit('call-audio-toggle', {
+      callId,
+      isAudioEnabled,
+      userId: socket.userId,
+      username: socket.username
+    });
+  });
+
+  // Уведомление о включении/выключении видео
+  socket.on('call-video-toggle', ({ callId, isVideoEnabled, targetUserId }) => {
+    socket.to(`user_${targetUserId}`).emit('call-video-toggle', {
+      callId,
+      isVideoEnabled,
+      userId: socket.userId,
+      username: socket.username
+    });
+  });
   
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.username}`);
@@ -200,6 +261,7 @@ const postRoutes = require('./routes/posts');
 const userRoutes = require('./routes/users');
 const followRoutes = require('./routes/follow');
 const messageRoutes = require('./routes/messages'); // Добавляем роуты для чата
+const callRoutes = require('./routes/calls'); // Добавляем роуты для звонков
 
 // Middleware для преобразования JWT в req.session.user для совместимости со старым кодом
 const jwtToSession = (req, res, next) => {
@@ -213,6 +275,7 @@ app.use('/api/posts', authenticateToken, jwtToSession, postRoutes);
 app.use('/api/users', authenticateToken, jwtToSession, userRoutes);
 app.use('/api/follow', authenticateToken, jwtToSession, followRoutes);
 app.use('/api/messages', authenticateToken, jwtToSession, messageRoutes); // Добавляем роуты сообщений
+app.use('/api/calls', authenticateToken, jwtToSession, callRoutes); // Добавляем роуты звонков
 
 // Роут для проверки текущего пользователя с JWT
 app.get('/api/me', authenticateToken, (req, res) => {
@@ -270,7 +333,9 @@ app.get('/api/health', async (req, res) => {
         realTimeUpdates: 'enabled',
         comments: 'enabled',
         likes: 'enabled',
-        chats: 'enabled' // Добавляем чаты в список фич
+        chats: 'enabled', // Добавляем чаты в список фич
+        voiceCalls: 'enabled', // Добавляем голосовые звонки
+        videoCalls: 'enabled' // Добавляем видео звонки
       }
     });
   } catch (error) {
@@ -305,6 +370,8 @@ app.get('/', (req, res) => {
       '❤️ Лайки с анимацией',
       '👥 Система подписок',
       '💬 Приватные чаты', // Добавляем чаты
+      '📞 Голосовые звонки', // Добавляем звонки
+      '📹 Видео звонки', // Добавляем видео звонки
       '🌙 Темная/светлая тема',
       '📱 Адаптивный дизайн'
     ],
@@ -328,6 +395,12 @@ app.get('/', (req, res) => {
       'PUT  /api/messages/chats/:chatId/read (requires Bearer token)', // Новый эндпоинт
       'DELETE /api/messages/messages/:messageId (requires Bearer token)', // Новый эндпоинт
       'GET  /api/messages/unread-count (requires Bearer token)', // Новый эндпоинт
+      'POST /api/calls/initiate (requires Bearer token)', // Новый эндпоинт
+      'POST /api/calls/accept/:callId (requires Bearer token)', // Новый эндпоинт
+      'POST /api/calls/decline/:callId (requires Bearer token)', // Новый эндпоинт
+      'POST /api/calls/end/:callId (requires Bearer token)', // Новый эндпоинт
+      'GET  /api/calls/active (requires Bearer token)', // Новый эндпоинт
+      'GET  /api/calls/history/:chatId (requires Bearer token)', // Новый эндпоинт
       'POST /api/logout',
       'GET  /api/health',
       'GET  /api/test-auth (requires Bearer token)'
@@ -397,7 +470,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Auth: JWT Bearer Token`);
   console.log(`⚡ Real-time: Socket.IO enabled`);
-  console.log(`🔄 Features: Reposts, Comments, Likes, Follows, Chats`);
+  console.log(`🔄 Features: Reposts, Comments, Likes, Follows, Chats, Voice/Video Calls`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
   console.log('   - POST /api/auth/register');
@@ -406,7 +479,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('   - GET  /api/test-auth (with Bearer token)');
   console.log('   - POST /api/posts/:id/repost (NEW!)');
   console.log('   - GET  /api/messages/chats (NEW!)');
-  console.log('   - Socket.IO: Real-time posts, reposts, likes, comments, chats');
+  console.log('   - Socket.IO: Real-time posts, reposts, likes, comments, chats, WebRTC calls');
 });
 
 module.exports = app;

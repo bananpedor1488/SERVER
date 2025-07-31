@@ -132,9 +132,18 @@ router.post('/chats', isAuth, async (req, res) => {
       createdAt: populatedChat.createdAt
     };
 
-    // Отправляем уведомление через Socket.IO
+    // Отправляем уведомление через Socket.IO обоим участникам
     const io = req.app.get('io');
-    io.to(`user_${participantId}`).emit('newChat', formattedChat);
+    
+    // Уведомляем создателя чата
+    io.to(`user_${userId}`).emit('chatCreated', formattedChat);
+    
+    // Уведомляем второго участника о новом чате
+    const participantFormattedChat = {
+      ...formattedChat,
+      name: req.session.user.username // Для второго участника имя чата - это имя создателя
+    };
+    io.to(`user_${participantId}`).emit('newChat', participantFormattedChat);
 
     res.status(201).json(formattedChat);
   } catch (error) {
@@ -167,21 +176,41 @@ router.get('/chats/:chatId/messages', isAuth, async (req, res) => {
       .lean();
 
     // Отмечаем сообщения как прочитанные
-    await Message.updateMany(
-      { 
-        chat: chatId, 
-        sender: { $ne: userId },
-        'readBy.user': { $ne: userId }
-      },
-      { 
-        $push: { 
-          readBy: { 
-            user: userId, 
-            readAt: new Date() 
+    const unreadMessages = await Message.find({
+      chat: chatId, 
+      sender: { $ne: userId },
+      'readBy.user': { $ne: userId }
+    });
+
+    if (unreadMessages.length > 0) {
+      await Message.updateMany(
+        { 
+          chat: chatId, 
+          sender: { $ne: userId },
+          'readBy.user': { $ne: userId }
+        },
+        { 
+          $push: { 
+            readBy: { 
+              user: userId, 
+              readAt: new Date() 
+            } 
           } 
-        } 
-      }
-    );
+        }
+      );
+
+      // Уведомляем других участников о прочтении
+      const io = req.app.get('io');
+      chat.participants.forEach(participantId => {
+        if (participantId.toString() !== userId) {
+          io.to(`user_${participantId}`).emit('messagesRead', {
+            chatId: chatId,
+            readBy: userId,
+            readByUsername: req.session.user.username
+          });
+        }
+      });
+    }
 
     // Сбрасываем счетчик непрочитанных сообщений
     await Chat.findByIdAndUpdate(chatId, {
@@ -222,8 +251,8 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
     }
 
     // Проверяем, является ли пользователь участником чата
-    const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(userId)) {
+    const chat = await Chat.findById(chatId).populate('participants', 'username');
+    if (!chat || !chat.participants.some(p => p._id.toString() === userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -242,21 +271,23 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
     });
 
     // Увеличиваем счетчик непрочитанных для других участников
-    const otherParticipants = chat.participants.filter(p => p.toString() !== userId);
-    for (const participantId of otherParticipants) {
-      await Chat.findByIdAndUpdate(chatId, {
-        $inc: {
-          'unreadCount.$[elem].count': 1
-        }
-      }, {
-        arrayFilters: [{ 'elem.user': participantId }],
-        upsert: true
-      });
-
-      // Если элемента не существует, создаем его
-      const chatToUpdate = await Chat.findById(chatId);
-      const hasUnreadEntry = chatToUpdate.unreadCount.some(u => u.user.toString() === participantId.toString());
-      if (!hasUnreadEntry) {
+    const otherParticipants = chat.participants.filter(p => p._id.toString() !== userId);
+    for (const participant of otherParticipants) {
+      const participantId = participant._id.toString();
+      
+      // Проверяем, есть ли уже запись о непрочитанных для этого пользователя
+      const existingChat = await Chat.findById(chatId);
+      const hasUnreadEntry = existingChat.unreadCount.some(u => u.user.toString() === participantId);
+      
+      if (hasUnreadEntry) {
+        await Chat.findByIdAndUpdate(chatId, {
+          $inc: {
+            'unreadCount.$[elem].count': 1
+          }
+        }, {
+          arrayFilters: [{ 'elem.user': mongoose.Types.ObjectId(participantId) }]
+        });
+      } else {
         await Chat.findByIdAndUpdate(chatId, {
           $push: {
             unreadCount: { user: participantId, count: 1 }
@@ -282,14 +313,35 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
     // Отправляем real-time уведомления
     const io = req.app.get('io');
     
-    // Отправляем сообщение всем участникам чата
-    chat.participants.forEach(participantId => {
-      if (participantId.toString() !== userId) {
-        io.to(`user_${participantId}`).emit('newMessage', {
-          chatId: chatId,
-          message: formattedMessage
-        });
-      }
+    // Уведомляем отправителя об успешной отправке
+    io.to(`user_${userId}`).emit('messageSent', {
+      chatId: chatId,
+      message: formattedMessage
+    });
+    
+    // Отправляем сообщение другим участникам чата
+    otherParticipants.forEach(participant => {
+      const participantId = participant._id.toString();
+      io.to(`user_${participantId}`).emit('newMessage', {
+        chatId: chatId,
+        message: formattedMessage
+      });
+      
+      // Обновляем список чатов с новым последним сообщением
+      io.to(`user_${participantId}`).emit('chatUpdated', {
+        chatId: chatId,
+        lastMessage: formattedMessage,
+        lastActivity: new Date(),
+        unreadIncrement: 1
+      });
+    });
+
+    // Обновляем список чатов для отправителя (без увеличения счетчика непрочитанных)
+    io.to(`user_${userId}`).emit('chatUpdated', {
+      chatId: chatId,
+      lastMessage: formattedMessage,
+      lastActivity: new Date(),
+      unreadIncrement: 0
     });
 
     res.status(201).json(formattedMessage);
@@ -310,6 +362,9 @@ router.put('/chats/:chatId/read', isAuth, async (req, res) => {
     if (!chat || !chat.participants.includes(userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
+
+    // Получаем количество непрочитанных сообщений перед обновлением
+    const unreadCount = chat.unreadCount.find(u => u.user.toString() === userId)?.count || 0;
 
     // Отмечаем все сообщения как прочитанные
     await Message.updateMany(
@@ -343,9 +398,17 @@ router.put('/chats/:chatId/read', isAuth, async (req, res) => {
       if (participantId.toString() !== userId) {
         io.to(`user_${participantId}`).emit('messagesRead', {
           chatId: chatId,
-          readBy: userId
+          readBy: userId,
+          readByUsername: req.session.user.username
         });
       }
+    });
+
+    // Уведомляем пользователя об обновлении счетчика
+    io.to(`user_${userId}`).emit('unreadCountUpdated', {
+      chatId: chatId,
+      unreadCount: 0,
+      totalUnreadDecrement: unreadCount
     });
 
     res.json({ message: 'Messages marked as read' });
@@ -374,13 +437,27 @@ router.delete('/messages/:messageId', isAuth, async (req, res) => {
     const chatId = message.chat;
     await Message.findByIdAndDelete(messageId);
 
-    // Отправляем уведомление об удалении
+    // Получаем информацию о чате
+    const chat = await Chat.findById(chatId).populate('participants', 'username');
+
+    // Обновляем последнее сообщение чата, если удаленное было последним
+    const chatInfo = await Chat.findById(chatId).populate('lastMessage');
+    if (chatInfo.lastMessage && chatInfo.lastMessage._id.toString() === messageId) {
+      const newLastMessage = await Message.findOne({ chat: chatId }).sort({ createdAt: -1 });
+      await Chat.findByIdAndUpdate(chatId, {
+        lastMessage: newLastMessage ? newLastMessage._id : null,
+        lastActivity: newLastMessage ? newLastMessage.createdAt : new Date()
+      });
+    }
+
+    // Отправляем уведомление об удалении всем участникам
     const io = req.app.get('io');
-    const chat = await Chat.findById(chatId);
-    chat.participants.forEach(participantId => {
-      io.to(`user_${participantId}`).emit('messageDeleted', {
+    chat.participants.forEach(participant => {
+      io.to(`user_${participant._id}`).emit('messageDeleted', {
         chatId: chatId,
-        messageId: messageId
+        messageId: messageId,
+        deletedBy: userId,
+        deletedByUsername: req.session.user.username
       });
     });
 
@@ -412,6 +489,60 @@ router.get('/unread-count', isAuth, async (req, res) => {
   } catch (error) {
     console.error('Error getting unread count:', error);
     res.status(500).json({ message: 'Error getting unread count' });
+  }
+});
+
+// Получить статус пользователя (онлайн/оффлайн)
+router.get('/users/:userId/status', isAuth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const io = req.app.get('io');
+    
+    // Проверяем, подключен ли пользователь через Socket.IO
+    const isOnline = io.sockets.sockets.size > 0 && 
+      Array.from(io.sockets.sockets.values()).some(socket => socket.userId === userId);
+    
+    res.json({ 
+      userId, 
+      isOnline,
+      lastSeen: isOnline ? new Date() : null 
+    });
+  } catch (error) {
+    console.error('Error getting user status:', error);
+    res.status(500).json({ message: 'Error getting user status' });
+  }
+});
+
+// Обновить статус "печатает"
+router.post('/chats/:chatId/typing', isAuth, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { isTyping } = req.body;
+    const userId = req.session.user.id;
+
+    // Проверяем доступ к чату
+    const chat = await Chat.findById(chatId);
+    if (!chat || !chat.participants.includes(userId)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Отправляем уведомление о статусе печати другим участникам
+    const io = req.app.get('io');
+    chat.participants.forEach(participantId => {
+      if (participantId.toString() !== userId) {
+        io.to(`user_${participantId}`).emit('userTyping', {
+          chatId: chatId,
+          userId: userId,
+          username: req.session.user.username,
+          isTyping: isTyping
+        });
+      }
+    });
+
+    res.json({ message: 'Typing status updated' });
+  } catch (error) {
+    console.error('Error updating typing status:', error);
+    res.status(500).json({ message: 'Error updating typing status' });
   }
 });
 
