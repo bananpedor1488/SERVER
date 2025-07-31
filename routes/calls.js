@@ -98,6 +98,7 @@ router.post('/initiate', isAuth, async (req, res) => {
     // Уведомляем вызывающего пользователя
     io.to(`user_${callerId}`).emit('callInitiated', {
       callId: populatedCall._id,
+      caller: populatedCall.caller,
       callee: populatedCall.callee,
       type: populatedCall.type,
       chat: populatedCall.chat
