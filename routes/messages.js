@@ -279,21 +279,19 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
       const existingChat = await Chat.findById(chatId);
       const hasUnreadEntry = Array.isArray(existingChat.unreadCount) && existingChat.unreadCount.some(u => u.user.toString() === participantId);
       
-      if (hasUnreadEntry) {
-        await Chat.findByIdAndUpdate(chatId, {
-          $inc: {
-            'unreadCount.$[elem].count': 1
-          }
-        }, {
-          arrayFilters: [{ 'elem.user': mongoose.Types.ObjectId(participantId) }]
-        });
-      } else {
-        await Chat.findByIdAndUpdate(chatId, {
-          $push: {
-            unreadCount: { user: participantId, count: 1 }
-          }
-        });
-      }
+              if (hasUnreadEntry) {
+          // Безопасно инкрементируем счётчик
+          await Chat.updateOne(
+            { _id: chatId, 'unreadCount.user': participantId },
+            { $inc: { 'unreadCount.$.count': 1 } }
+          );
+        } else {
+          // Добавляем новую запись для участника
+          await Chat.updateOne(
+            { _id: chatId },
+            { $push: { unreadCount: { user: participantId, count: 1 } } }
+          );
+        }
     }
 
     // Получаем полную информацию о сообщении
