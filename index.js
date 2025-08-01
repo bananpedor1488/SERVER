@@ -192,6 +192,19 @@ io.on('connection', async (socket) => {
       timestamp: new Date()
     });
     
+    // Отправляем список всех онлайн пользователей новому подключившемуся пользователю
+    const onlineUsers = await User.find({ isOnline: true }, 'username isOnline lastSeen');
+    socket.emit('onlineUsersSync', {
+      users: onlineUsers.reduce((acc, user) => {
+        acc[user._id] = {
+          username: user.username,
+          isOnline: user.isOnline,
+          lastSeen: user.lastSeen
+        };
+        return acc;
+      }, {})
+    });
+    
     console.log(`✅ User ${socket.username} is now online`);
   } catch (error) {
     console.error('Error updating user online status:', error);
