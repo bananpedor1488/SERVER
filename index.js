@@ -108,6 +108,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // JWT Middleware для проверки токенов
 const authenticateToken = (req, res, next) => {
+  // Разрешаем preflight-запросы (OPTIONS) без токена
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
