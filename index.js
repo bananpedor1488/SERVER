@@ -170,11 +170,32 @@ const authenticateSocketToken = (socket, next) => {
 // Socket.IO подключение
 io.use(authenticateSocketToken);
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log(`User connected: ${socket.username} (${socket.userId})`);
   
   // Присоединяем пользователя к общей комнате для постов
   socket.join('posts');
+  
+  // Обновляем онлайн статус пользователя
+  try {
+    const User = require('./models/User');
+    await User.findByIdAndUpdate(socket.userId, {
+      isOnline: true,
+      lastSeen: new Date(),
+      socketId: socket.id
+    });
+    
+    // Уведомляем всех о том, что пользователь онлайн
+    socket.broadcast.emit('userOnline', {
+      userId: socket.userId,
+      username: socket.username,
+      timestamp: new Date()
+    });
+    
+    console.log(`✅ User ${socket.username} is now online`);
+  } catch (error) {
+    console.error('Error updating user online status:', error);
+  }
 
   // Обработчик для печатания в чате
   socket.on('typing', ({ chatId, isTyping }) => {
@@ -237,12 +258,54 @@ io.on('connection', (socket) => {
       username: socket.username
     });
   });
+
+  // Событие для обновления активности пользователя (heartbeat)
+  socket.on('user-activity', async () => {
+    try {
+      const User = require('./models/User');
+      await User.findByIdAndUpdate(socket.userId, {
+        lastSeen: new Date()
+      });
+    } catch (error) {
+      console.error('Error updating user activity:', error);
+    }
+  });
+
+  // Уведомление об улучшении аудио звонка до видео
+  socket.on('call-video-upgrade', ({ callId, targetUserId }) => {
+    socket.to(`user_${targetUserId}`).emit('call-video-upgrade', {
+      callId,
+      userId: socket.userId,
+      username: socket.username
+    });
+  });
   
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`User disconnected: ${socket.username}`);
     
-    // Автоматически завершаем активные звонки при отключении пользователя
+    // Обновляем офлайн статус пользователя
     if (socket.userId) {
+      try {
+        const User = require('./models/User');
+        await User.findByIdAndUpdate(socket.userId, {
+          isOnline: false,
+          lastSeen: new Date(),
+          socketId: null
+        });
+        
+        // Уведомляем всех о том, что пользователь офлайн
+        socket.broadcast.emit('userOffline', {
+          userId: socket.userId,
+          username: socket.username,
+          lastSeen: new Date()
+        });
+        
+        console.log(`❌ User ${socket.username} is now offline`);
+      } catch (error) {
+        console.error('Error updating user offline status:', error);
+      }
+      
+      // Автоматически завершаем активные звонки при отключении пользователя
       const Call = require('./models/Call');
       Call.updateMany({
         $or: [

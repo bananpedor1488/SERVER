@@ -37,6 +37,47 @@ router.get('/search', isAuth, async (req, res) => {
   }
 });
 
+// 🔹 Получить онлайн статус пользователей
+router.get('/online-status', isAuth, async (req, res) => {
+  try {
+    const userIds = req.query.userIds;
+    
+    if (!userIds) {
+      return res.status(400).json({ message: 'userIds parameter is required' });
+    }
+    
+    // Парсим userIds (может быть строкой или массивом)
+    let idsArray;
+    if (typeof userIds === 'string') {
+      idsArray = userIds.split(',');
+    } else if (Array.isArray(userIds)) {
+      idsArray = userIds;
+    } else {
+      return res.status(400).json({ message: 'Invalid userIds format' });
+    }
+    
+    // Получаем статус пользователей
+    const users = await User.find(
+      { _id: { $in: idsArray } },
+      'username isOnline lastSeen'
+    );
+    
+    const statusMap = {};
+    users.forEach(user => {
+      statusMap[user._id] = {
+        username: user.username,
+        isOnline: user.isOnline,
+        lastSeen: user.lastSeen
+      };
+    });
+    
+    res.json(statusMap);
+  } catch (error) {
+    console.error('Error fetching online status:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // 🔹 Получить рекомендации пользователей
 router.get('/suggestions', isAuth, async (req, res) => {
   try {
