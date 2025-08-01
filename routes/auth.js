@@ -96,7 +96,10 @@ router.post('/register', async (req, res) => {
       user: {
         id: user._id.toString(),
         username: user.username,
-        email: user.email
+        email: user.email,
+        displayName: user.displayName,
+        bio: user.bio,
+        avatar: user.avatar
       }
     });
     
@@ -159,7 +162,10 @@ router.post('/login', async (req, res) => {
       user: {
         id: user._id.toString(),
         username: user.username,
-        email: user.email
+        email: user.email,
+        displayName: user.displayName,
+        bio: user.bio,
+        avatar: user.avatar
       }
     });
     

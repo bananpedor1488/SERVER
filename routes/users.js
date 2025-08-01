@@ -6,6 +6,7 @@ const Repost = require('../models/Repost');
 const Comment = require('../models/Comment');
 const Follow = require('../models/Follow');
 const requireAuth = require('../middleware/requireAuth');
+const jwtAuth = require('../middleware/jwtAuth');
 
 const router = express.Router();
 
@@ -97,6 +98,8 @@ router.get('/suggestions', isAuth, async (req, res) => {
       {
         $project: {
           username: 1,
+          displayName: 1,
+          avatar: 1,
           followersCount: { $size: '$followers' }
         }
       }
@@ -118,7 +121,7 @@ router.get('/:id', isAuth, async (req, res) => {
     }
 
     const currentUserId = req.session.user.id;
-    const user = await User.findById(req.params.id).select('username followers following');
+    const user = await User.findById(req.params.id).select('username displayName bio avatar followers following');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     // Проверяем, подписан ли текущий пользователь на этого пользователя
@@ -127,6 +130,9 @@ router.get('/:id', isAuth, async (req, res) => {
     res.json({
       _id: user._id,
       username: user.username,
+      displayName: user.displayName,
+      bio: user.bio,
+      avatar: user.avatar,
       followersCount: user.followers.length,
       followingCount: user.following.length,
       followed: isFollowing
@@ -148,18 +154,18 @@ router.get('/:id/posts', isAuth, async (req, res) => {
     // Получаем обычные посты пользователя
     const posts = await Post.find({ author: req.params.id })
       .sort({ createdAt: -1 })
-      .populate('author', 'username')
+      .populate('author', 'username displayName avatar')
       .lean();
 
     // Получаем репосты пользователя
     const reposts = await Repost.find({ repostedBy: req.params.id })
       .sort({ createdAt: -1 })
-      .populate('repostedBy', 'username')
+      .populate('repostedBy', 'username displayName avatar')
       .populate({
         path: 'originalPost',
         populate: {
           path: 'author',
-          select: 'username'
+          select: 'username displayName avatar'
         }
       })
       .lean();
@@ -212,7 +218,7 @@ router.get('/:id/posts', isAuth, async (req, res) => {
     // Получаем комментарии для всех постов
     const comments = await Comment.find({ post: { $in: postIds } })
       .sort({ createdAt: 1 })
-      .populate('author', 'username')
+      .populate('author', 'username displayName avatar')
       .lean();
 
     // Группируем комментарии по постам
@@ -247,6 +253,76 @@ router.get('/:id/posts', isAuth, async (req, res) => {
     res.json(postsWithComments);
   } catch (err) {
     console.error('Ошибка при получении постов:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// 🔹 Обновление профиля пользователя (используем JWT авторизацию)
+router.put('/profile/:id', jwtAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { displayName, bio, avatar } = req.body;
+    const currentUserId = req.userId;
+
+    // Проверяем, что пользователь обновляет свой собственный профиль
+    if (id !== currentUserId) {
+      return res.status(403).json({ message: 'You can only update your own profile' });
+    }
+
+    // Проверяем, что id является валидным ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Валидация данных
+    const updateData = {};
+    
+    if (displayName !== undefined) {
+      if (displayName.length > 50) {
+        return res.status(400).json({ message: 'Display name cannot exceed 50 characters' });
+      }
+      updateData.displayName = displayName.trim();
+    }
+    
+    if (bio !== undefined) {
+      if (bio.length > 160) {
+        return res.status(400).json({ message: 'Bio cannot exceed 160 characters' });
+      }
+      updateData.bio = bio.trim();
+    }
+    
+    if (avatar !== undefined) {
+      // Проверяем размер base64 аватарки (примерно 5MB в base64)
+      if (avatar && avatar.length > 7000000) {
+        return res.status(400).json({ message: 'Avatar file is too large. Maximum size is 5MB' });
+      }
+      updateData.avatar = avatar;
+    }
+
+    // Обновляем пользователя
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('username displayName bio avatar');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        _id: updatedUser._id,
+        username: updatedUser.username,
+        displayName: updatedUser.displayName,
+        bio: updatedUser.bio,
+        avatar: updatedUser.avatar
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating profile:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

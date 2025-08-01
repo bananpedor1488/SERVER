@@ -7,6 +7,11 @@ const UserSchema = new mongoose.Schema({
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   
+  // Новые поля профиля
+  displayName: { type: String, maxlength: 50 }, // Отображаемое имя
+  bio: { type: String, maxlength: 160 }, // Описание профиля
+  avatar: { type: String }, // Base64 аватарка или URL
+  
   // Онлайн статус и активность
   isOnline: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now },

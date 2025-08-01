@@ -20,18 +20,18 @@ router.get('/', isAuth, async (req, res) => {
     // Получаем обычные посты
     const posts = await Post.find()
       .sort({ createdAt: -1 })
-      .populate('author', 'username')
+      .populate('author', 'username displayName avatar')
       .lean();
 
     // Получаем репосты
     const reposts = await Repost.find()
       .sort({ createdAt: -1 })
-      .populate('repostedBy', 'username')
+      .populate('repostedBy', 'username displayName avatar')
       .populate({
         path: 'originalPost',
         populate: {
           path: 'author',
-          select: 'username'
+          select: 'username displayName avatar'
         }
       })
       .lean();
@@ -83,7 +83,7 @@ router.get('/', isAuth, async (req, res) => {
     // Получаем комментарии для всех постов одним запросом
     const comments = await Comment.find({ post: { $in: postIds } })
       .sort({ createdAt: 1 })
-      .populate('author', 'username')
+      .populate('author', 'username displayName avatar')
       .lean();
 
     // Группируем комментарии по постам
@@ -145,7 +145,7 @@ router.post('/', isAuth, async (req, res) => {
       content
     });
 
-    const populated = await post.populate('author', 'username');
+    const populated = await post.populate('author', 'username displayName avatar');
     
     // Добавляем пустой массив комментариев для консистентности
     const postWithComments = {
@@ -173,7 +173,7 @@ router.post('/:id/repost', isAuth, async (req, res) => {
     const userId = req.session.user.id;
 
     // Проверяем, существует ли оригинальный пост
-    const originalPost = await Post.findById(originalPostId).populate('author', 'username');
+    const originalPost = await Post.findById(originalPostId).populate('author', 'username displayName avatar');
     if (!originalPost) {
       return res.status(404).json({ message: 'Пост не найден' });
     }
@@ -201,12 +201,12 @@ router.post('/:id/repost', isAuth, async (req, res) => {
 
     // Получаем полную информацию о репосте
     const populatedRepost = await Repost.findById(repost._id)
-      .populate('repostedBy', 'username')
+      .populate('repostedBy', 'username displayName avatar')
       .populate({
         path: 'originalPost',
         populate: {
           path: 'author',
-          select: 'username'
+          select: 'username displayName avatar'
         }
       });
 
@@ -276,7 +276,7 @@ router.post('/:id/comment', isAuth, async (req, res) => {
       content
     });
 
-    const populated = await comment.populate('author', 'username');
+    const populated = await comment.populate('author', 'username displayName avatar');
 
     // Отправляем real-time обновление всем подключенным пользователям
     const io = req.app.get('io');
@@ -297,7 +297,7 @@ router.get('/:id/comments', isAuth, async (req, res) => {
   try {
     const comments = await Comment.find({ post: req.params.id })
       .sort({ createdAt: 1 })
-      .populate('author', 'username');
+      .populate('author', 'username displayName avatar');
 
     res.json(comments);
   } catch (error) {
