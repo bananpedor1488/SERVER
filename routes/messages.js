@@ -277,7 +277,7 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
       
       // Проверяем, есть ли уже запись о непрочитанных для этого пользователя
       const existingChat = await Chat.findById(chatId);
-      const hasUnreadEntry = existingChat.unreadCount.some(u => u.user.toString() === participantId);
+      const hasUnreadEntry = Array.isArray(existingChat.unreadCount) && existingChat.unreadCount.some(u => u.user.toString() === participantId);
       
       if (hasUnreadEntry) {
         await Chat.findByIdAndUpdate(chatId, {
