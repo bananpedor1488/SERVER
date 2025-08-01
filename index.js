@@ -257,6 +257,17 @@ io.on('connection', async (socket) => {
     });
   });
 
+  // Смена ICE профиля – пересылаем выбор TURN/STUN сервера
+  socket.on('webrtc-change-server', ({ callId, serverKey, targetUserId }) => {
+    console.log(`ICE profile change requested by ${socket.username} for call ${callId} -> ${targetUserId}`);
+    socket.to(`user_${targetUserId}`).emit('webrtc-change-server', {
+      callId,
+      serverKey
+    });
+  });
+
+
+
   // Уведомление о включении/выключении микрофона
   socket.on('call-audio-toggle', ({ callId, isAudioEnabled, targetUserId }) => {
     socket.to(`user_${targetUserId}`).emit('call-audio-toggle', {
