@@ -397,19 +397,28 @@ app.use('/api/messages', authenticateToken, jwtToSession, messageRoutes); // Д�
 app.use('/api/calls', authenticateToken, jwtToSession, callRoutes); // Добавляем роуты звонков
 
 // Роут для проверки текущего пользователя с JWT
-app.get('/api/me', authenticateToken, (req, res) => {
-  console.log('GET /api/me called with JWT');
-  console.log('User from token:', req.user);
-  
-  res.json({ 
-    user: {
-      id: req.user.id,
-      username: req.user.username,
-      email: req.user.email
-    },
-    authenticated: true,
-    tokenValid: true
-  });
+app.get('/api/me', authenticateToken, async (req, res) => {
+  try {
+    console.log('GET /api/me called with JWT');
+    console.log('User from token:', req.user);
+    
+    // Получаем полные данные пользователя из базы данных
+    const User = require('./models/User');
+    const fullUser = await User.findById(req.user.id).select('-password');
+    
+    if (!fullUser) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+    
+    res.json({ 
+      user: fullUser,
+      authenticated: true,
+      tokenValid: true
+    });
+  } catch (error) {
+    console.error('Error in /api/me:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
 });
 
 // Тестовый роут для проверки JWT
