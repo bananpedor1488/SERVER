@@ -21,7 +21,7 @@ router.get('/chats', isAuth, async (req, res) => {
     })
     .populate({
       path: 'participants',
-      select: 'username'
+      select: 'username displayName avatar'
     })
     .populate({
       path: 'lastMessage',
@@ -83,7 +83,7 @@ router.post('/chats', isAuth, async (req, res) => {
       type: 'private',
       participants: { $all: [userId, participantId] }
     })
-    .populate('participants', 'username')
+    .populate('participants', 'username displayName avatar')
     .populate({
       path: 'lastMessage',
       populate: {
@@ -116,7 +116,7 @@ router.post('/chats', isAuth, async (req, res) => {
     });
 
     const populatedChat = await Chat.findById(newChat._id)
-      .populate('participants', 'username');
+      .populate('participants', 'username displayName avatar');
 
     const otherParticipant = populatedChat.participants.find(p => p._id.toString() !== userId);
 
