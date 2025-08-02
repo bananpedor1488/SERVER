@@ -28,19 +28,6 @@ router.get('/search', isAuth, async (req, res) => {
   try {
     // Вместо _id используем поле username для поиска
     const users = await User.find({ username: new RegExp(query, 'i') }).select('username displayName avatar').lean();
-    
-    console.log('🔍 ПОИСК ПОЛЬЗОВАТЕЛЕЙ:', {
-      query: query,
-      найдено: users.length,
-      пользователи: users.map(u => ({
-        username: u.username,
-        displayName: u.displayName,
-        avatarExists: !!u.avatar,
-        avatarLength: u.avatar ? u.avatar.length : 0,
-        avatarPrefix: u.avatar ? u.avatar.substring(0, 30) + '...' : 'НЕТ АВАТАРКИ'
-      }))
-    });
-    
     if (users.length === 0) {
       return res.status(404).json({ message: 'No users found' });
     }

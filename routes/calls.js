@@ -22,7 +22,7 @@ router.post('/initiate', isAuth, async (req, res) => {
     }
 
     // Проверяем существование чата и доступ
-    const chat = await Chat.findById(chatId).populate('participants', 'username');
+    const chat = await Chat.findById(chatId).populate('participants', 'username displayName avatar');
     if (!chat || !chat.participants.some(p => p._id.toString() === callerId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -80,8 +80,8 @@ router.post('/initiate', isAuth, async (req, res) => {
     });
 
     const populatedCall = await Call.findById(newCall._id)
-      .populate('caller', 'username')
-      .populate('callee', 'username')
+      .populate('caller', 'username displayName avatar')
+      .populate('callee', 'username displayName avatar')
       .populate('chat');
 
     // Отправляем уведомление через Socket.IO
@@ -123,8 +123,8 @@ router.post('/accept/:callId', isAuth, async (req, res) => {
     const userId = req.session.user.id;
 
     const call = await Call.findById(callId)
-      .populate('caller', 'username')
-      .populate('callee', 'username');
+      .populate('caller', 'username displayName avatar')
+      .populate('callee', 'username displayName avatar');
 
     if (!call) {
       return res.status(404).json({ message: 'Call not found' });
@@ -174,8 +174,8 @@ router.post('/decline/:callId', isAuth, async (req, res) => {
     const userId = req.session.user.id;
 
     const call = await Call.findById(callId)
-      .populate('caller', 'username')
-      .populate('callee', 'username');
+      .populate('caller', 'username displayName avatar')
+      .populate('callee', 'username displayName avatar');
 
     if (!call) {
       return res.status(404).json({ message: 'Call not found' });
@@ -221,8 +221,8 @@ router.post('/end/:callId', isAuth, async (req, res) => {
     console.log(`Ending call ${callId} by user ${userId}`);
 
     const call = await Call.findById(callId)
-      .populate('caller', 'username')
-      .populate('callee', 'username');
+      .populate('caller', 'username displayName avatar')
+      .populate('callee', 'username displayName avatar');
 
     if (!call) {
       console.log('Call not found, might be already ended');
@@ -299,8 +299,8 @@ router.get('/history/:chatId', isAuth, async (req, res) => {
     }
 
     const calls = await Call.find({ chat: chatId })
-      .populate('caller', 'username')
-      .populate('callee', 'username')
+      .populate('caller', 'username displayName avatar')
+      .populate('callee', 'username displayName avatar')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -326,8 +326,8 @@ router.get('/active', isAuth, async (req, res) => {
         { callee: userId, status: { $in: ['pending', 'accepted'] } }
       ]
     })
-    .populate('caller', 'username')
-    .populate('callee', 'username')
+    .populate('caller', 'username displayName avatar')
+    .populate('callee', 'username displayName avatar')
     .populate('chat');
 
     if (activeCall) {
@@ -354,7 +354,7 @@ router.post('/cleanup', isAuth, async (req, res) => {
         { caller: userId, status: { $in: ['pending', 'accepted'] } },
         { callee: userId, status: { $in: ['pending', 'accepted'] } }
       ]
-    }).populate('caller', 'username').populate('callee', 'username');
+    }).populate('caller', 'username displayName avatar').populate('callee', 'username displayName avatar');
 
     if (activeCallsToClean.length > 0) {
       console.log(`🧹 Cleanup for user ${userId}:`);

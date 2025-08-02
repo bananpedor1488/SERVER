@@ -27,7 +27,7 @@ router.get('/chats', isAuth, async (req, res) => {
       path: 'lastMessage',
       populate: {
         path: 'sender',
-        select: 'username'
+        select: 'username displayName avatar'
       }
     })
     .sort({ lastActivity: -1 })
@@ -88,7 +88,7 @@ router.post('/chats', isAuth, async (req, res) => {
       path: 'lastMessage',
       populate: {
         path: 'sender',
-        select: 'username'
+        select: 'username displayName avatar'
       }
     });
 
@@ -167,13 +167,13 @@ router.get('/chats/:chatId/messages', isAuth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Получаем сообщения
-    const messages = await Message.find({ chat: chatId })
-      .populate('sender', 'username')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+          // Получаем сообщения
+      const messages = await Message.find({ chat: chatId })
+        .populate('sender', 'username displayName avatar')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
 
     // Отмечаем сообщения как прочитанные
     const unreadMessages = await Message.find({
@@ -296,7 +296,7 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
 
     // Получаем полную информацию о сообщении
     const populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'username');
+      .populate('sender', 'username displayName avatar');
 
     const formattedMessage = {
       _id: populatedMessage._id,
