@@ -158,7 +158,7 @@ router.get('/chats/:chatId/messages', isAuth, async (req, res) => {
     const { chatId } = req.params;
     const userId = req.session.user.id;
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
+    const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
     // Проверяем, является ли пользователь участником чата
@@ -221,6 +221,10 @@ router.get('/chats/:chatId/messages', isAuth, async (req, res) => {
       arrayFilters: [{ 'elem.user': userId }]
     });
 
+    // Подсчитываем общее количество сообщений для пагинации
+    const totalMessages = await Message.countDocuments({ chat: chatId });
+    const hasMore = page * limit < totalMessages;
+
     // Форматируем сообщения
     const formattedMessages = messages.reverse().map(message => ({
       _id: message._id,
@@ -232,7 +236,15 @@ router.get('/chats/:chatId/messages', isAuth, async (req, res) => {
       isRead: message.readBy.some(read => read.user.toString() !== userId.toString())
     }));
 
-    res.json(formattedMessages);
+    res.json({
+      messages: formattedMessages,
+      pagination: {
+        page,
+        limit,
+        total: totalMessages,
+        hasMore
+      }
+    });
   } catch (error) {
     console.error('Error fetching messages:', error);
     res.status(500).json({ message: 'Error fetching messages' });
