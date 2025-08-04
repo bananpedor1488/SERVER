@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const Points = require('../models/Points');
 const User = require('../models/User');
-const { isAuth } = require('../middleware/auth');
 
 // Генерация уникального кода транзакции
 const generateTransactionCode = () => {
@@ -12,7 +11,7 @@ const generateTransactionCode = () => {
 };
 
 // Получить баланс пользователя
-router.get('/balance', isAuth, async (req, res) => {
+router.get('/balance', async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('points username displayName');
     res.json({ 
@@ -27,7 +26,7 @@ router.get('/balance', isAuth, async (req, res) => {
 });
 
 // Получить историю транзакций пользователя
-router.get('/transactions', isAuth, async (req, res) => {
+router.get('/transactions', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -69,7 +68,7 @@ router.get('/transactions', isAuth, async (req, res) => {
 });
 
 // Перевести баллы другому пользователю
-router.post('/transfer', isAuth, async (req, res) => {
+router.post('/transfer', async (req, res) => {
   try {
     const { recipientUsername, amount, description } = req.body;
 
@@ -147,7 +146,7 @@ router.post('/transfer', isAuth, async (req, res) => {
 });
 
 // Получить топ пользователей по баллам
-router.get('/leaderboard', isAuth, async (req, res) => {
+router.get('/leaderboard', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     
@@ -171,7 +170,7 @@ router.get('/leaderboard', isAuth, async (req, res) => {
 });
 
 // Получить детали конкретной транзакции
-router.get('/transaction/:transactionCode', isAuth, async (req, res) => {
+router.get('/transaction/:transactionCode', async (req, res) => {
   try {
     const { transactionCode } = req.params;
 
