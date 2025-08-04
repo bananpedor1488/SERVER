@@ -201,4 +201,146 @@ router.get('/transaction/:transactionCode', async (req, res) => {
   }
 });
 
+// Купить премиум
+router.post('/buy-premium', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const premiumCost = 300; // Стоимость премиума в баллах
+
+    if (user.points < premiumCost) {
+      return res.status(400).json({ message: 'Недостаточно баллов для покупки премиума' });
+    }
+
+    // Вычислить дату окончания премиума (30 дней)
+    const premiumExpiresAt = new Date();
+    premiumExpiresAt.setDate(premiumExpiresAt.getDate() + 30);
+
+    // Обновить пользователя
+    user.points -= premiumCost;
+    user.premium = true;
+    user.premiumExpiresAt = premiumExpiresAt;
+    await user.save();
+
+    // Создать транзакцию
+    const transactionCode = generateTransactionCode();
+    const transaction = new Points({
+      transactionCode,
+      sender: req.user.id,
+      recipient: req.user.id, // Пользователь сам себе
+      amount: premiumCost,
+      description: 'Покупка премиума на 30 дней',
+      type: 'premium',
+      senderBalanceBefore: user.points + premiumCost,
+      senderBalanceAfter: user.points,
+      recipientBalanceBefore: user.points + premiumCost,
+      recipientBalanceAfter: user.points
+    });
+    await transaction.save();
+
+    res.json({
+      message: 'Премиум успешно куплен',
+      premium: {
+        active: true,
+        expiresAt: premiumExpiresAt
+      },
+      newBalance: user.points
+    });
+
+  } catch (error) {
+    console.error('Error buying premium:', error);
+    res.status(500).json({ message: 'Ошибка покупки премиума' });
+  }
+});
+
+// Подарить премиум другому пользователю
+router.post('/gift-premium', async (req, res) => {
+  try {
+    const { recipientUsername } = req.body;
+    const premiumCost = 300; // Стоимость премиума в баллах
+
+    if (!recipientUsername) {
+      return res.status(400).json({ message: 'Укажите имя пользователя' });
+    }
+
+    const sender = await User.findById(req.user.id);
+    const recipient = await User.findOne({ username: recipientUsername });
+
+    if (!recipient) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    if (sender.points < premiumCost) {
+      return res.status(400).json({ message: 'Недостаточно баллов для покупки премиума' });
+    }
+
+    // Вычислить дату окончания премиума (30 дней)
+    const premiumExpiresAt = new Date();
+    premiumExpiresAt.setDate(premiumExpiresAt.getDate() + 30);
+
+    // Обновить получателя
+    recipient.premium = true;
+    recipient.premiumExpiresAt = premiumExpiresAt;
+    await recipient.save();
+
+    // Обновить отправителя
+    sender.points -= premiumCost;
+    await sender.save();
+
+    // Создать транзакцию
+    const transactionCode = generateTransactionCode();
+    const transaction = new Points({
+      transactionCode,
+      sender: req.user.id,
+      recipient: recipient._id,
+      amount: premiumCost,
+      description: `Подарок премиума пользователю @${recipientUsername}`,
+      type: 'premium_gift',
+      senderBalanceBefore: sender.points + premiumCost,
+      senderBalanceAfter: sender.points,
+      recipientBalanceBefore: recipient.points,
+      recipientBalanceAfter: recipient.points
+    });
+    await transaction.save();
+
+    res.json({
+      message: `Премиум успешно подарен пользователю @${recipientUsername}`,
+      newBalance: sender.points
+    });
+
+  } catch (error) {
+    console.error('Error gifting premium:', error);
+    res.status(500).json({ message: 'Ошибка дарения премиума' });
+  }
+});
+
+// Получить информацию о премиуме
+router.get('/premium-info', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('premium premiumExpiresAt points');
+    
+    const now = new Date();
+    const isPremiumActive = user.premium && user.premiumExpiresAt && user.premiumExpiresAt > now;
+    
+    // Если премиум истек, обновить статус
+    if (user.premium && user.premiumExpiresAt && user.premiumExpiresAt <= now) {
+      user.premium = false;
+      user.premiumExpiresAt = null;
+      await user.save();
+    }
+
+    res.json({
+      premium: {
+        active: isPremiumActive,
+        expiresAt: user.premiumExpiresAt
+      },
+      points: user.points,
+      premiumCost: 300
+    });
+
+  } catch (error) {
+    console.error('Error fetching premium info:', error);
+    res.status(500).json({ message: 'Ошибка получения информации о премиуме' });
+  }
+});
+
 module.exports = router; 

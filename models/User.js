@@ -19,6 +19,10 @@ const UserSchema = new mongoose.Schema({
   
   // Система баллов
   points: { type: Number, default: 0 }, // Начальный баланс 0 баллов
+  
+  // Премиум система
+  premium: { type: Boolean, default: false }, // Премиум статус
+  premiumExpiresAt: { type: Date }, // Дата окончания премиума
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);
