@@ -18,7 +18,7 @@ const UserSchema = new mongoose.Schema({
   socketId: { type: String }, // Для отслеживания Socket.IO соединения
   
   // Система баллов
-  points: { type: Number, default: 100 }, // Начальный баланс 100 баллов
+  points: { type: Number, default: 0 }, // Начальный баланс 0 баллов
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);
