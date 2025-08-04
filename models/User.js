@@ -16,6 +16,9 @@ const UserSchema = new mongoose.Schema({
   isOnline: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now },
   socketId: { type: String }, // Для отслеживания Socket.IO соединения
+  
+  // Система баллов
+  points: { type: Number, default: 100 }, // Начальный баланс 100 баллов
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);

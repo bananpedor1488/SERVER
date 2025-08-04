@@ -381,6 +381,7 @@ const userRoutes = require('./routes/users');
 const followRoutes = require('./routes/follow');
 const messageRoutes = require('./routes/messages'); // Добавляем роуты для чата
 const callRoutes = require('./routes/calls'); // Добавляем роуты для звонков
+const pointsRoutes = require('./routes/points'); // Добавляем роуты для баллов
 
 // Middleware для преобразования JWT в req.session.user для совместимости со старым кодом
 const jwtToSession = (req, res, next) => {
@@ -395,6 +396,7 @@ app.use('/api/users', authenticateToken, jwtToSession, userRoutes);
 app.use('/api/follow', authenticateToken, jwtToSession, followRoutes);
 app.use('/api/messages', authenticateToken, jwtToSession, messageRoutes); // Добавляем роуты сообщений
 app.use('/api/calls', authenticateToken, jwtToSession, callRoutes); // Добавляем роуты звонков
+app.use('/api/points', authenticateToken, jwtToSession, pointsRoutes); // Добавляем роуты баллов
 
 // Роут для проверки текущего пользователя с JWT
 app.get('/api/me', authenticateToken, async (req, res) => {
