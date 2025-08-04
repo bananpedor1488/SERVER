@@ -30,7 +30,7 @@ const PointsSchema = new mongoose.Schema({
   // Тип транзакции
   type: { 
     type: String, 
-    enum: ['transfer', 'reward', 'bonus', 'system'],
+    enum: ['transfer', 'reward', 'bonus', 'system', 'premium', 'premium_gift'],
     default: 'transfer'
   },
   
