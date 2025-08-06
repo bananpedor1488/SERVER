@@ -21,13 +21,13 @@ router.get('/chats', isAuth, async (req, res) => {
     })
     .populate({
       path: 'participants',
-      select: 'username displayName avatar'
+      select: 'username displayName avatar premium'
     })
     .populate({
       path: 'lastMessage',
       populate: {
         path: 'sender',
-        select: 'username displayName avatar'
+        select: 'username displayName avatar premium'
       }
     })
     .sort({ lastActivity: -1 })

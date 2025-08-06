@@ -220,7 +220,7 @@ router.get('/:id/posts', isAuth, async (req, res) => {
     // Получаем комментарии для всех постов
     const comments = await Comment.find({ post: { $in: postIds } })
       .sort({ createdAt: 1 })
-      .populate('author', 'username displayName avatar')
+      .populate('author', 'username displayName avatar premium')
       .lean();
 
     // Группируем комментарии по постам
