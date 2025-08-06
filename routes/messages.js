@@ -83,12 +83,12 @@ router.post('/chats', isAuth, async (req, res) => {
       type: 'private',
       participants: { $all: [userId, participantId] }
     })
-    .populate('participants', 'username displayName avatar')
+    .populate('participants', 'username displayName avatar premium')
     .populate({
       path: 'lastMessage',
       populate: {
         path: 'sender',
-        select: 'username displayName avatar'
+        select: 'username displayName avatar premium'
       }
     });
 
@@ -116,7 +116,7 @@ router.post('/chats', isAuth, async (req, res) => {
     });
 
     const populatedChat = await Chat.findById(newChat._id)
-      .populate('participants', 'username displayName avatar');
+      .populate('participants', 'username displayName avatar premium');
 
     const otherParticipant = populatedChat.participants.find(p => p._id.toString() !== userId);
 
@@ -169,7 +169,7 @@ router.get('/chats/:chatId/messages', isAuth, async (req, res) => {
 
           // Получаем сообщения
       const messages = await Message.find({ chat: chatId })
-        .populate('sender', 'username displayName avatar')
+        .populate('sender', 'username displayName avatar premium')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -308,7 +308,7 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
 
     // Получаем полную информацию о сообщении
     const populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'username displayName avatar');
+      .populate('sender', 'username displayName avatar premium');
 
     const formattedMessage = {
       _id: populatedMessage._id,

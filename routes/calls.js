@@ -22,7 +22,7 @@ router.post('/initiate', isAuth, async (req, res) => {
     }
 
     // Проверяем существование чата и доступ
-    const chat = await Chat.findById(chatId).populate('participants', 'username displayName avatar');
+    const chat = await Chat.findById(chatId).populate('participants', 'username displayName avatar premium');
     if (!chat || !chat.participants.some(p => p._id.toString() === callerId)) {
       return res.status(403).json({ message: 'Access denied' });
     }

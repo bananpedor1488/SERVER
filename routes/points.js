@@ -35,8 +35,8 @@ router.get('/transactions', async (req, res) => {
     const transactions = await Points.find({
       $or: [{ sender: req.user.id }, { recipient: req.user.id }]
     })
-    .populate('sender', 'username displayName avatar')
-    .populate('recipient', 'username displayName avatar')
+    .populate('sender', 'username displayName avatar premium')
+    .populate('recipient', 'username displayName avatar premium')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
@@ -126,8 +126,8 @@ router.post('/transfer', async (req, res) => {
 
     // Получить обновленные данные для ответа
     const populatedTransaction = await Points.findById(transaction._id)
-      .populate('sender', 'username displayName avatar')
-      .populate('recipient', 'username displayName avatar');
+      .populate('sender', 'username displayName avatar premium')
+      .populate('recipient', 'username displayName avatar premium');
 
     res.json({
       message: 'Перевод выполнен успешно',
@@ -151,7 +151,7 @@ router.get('/leaderboard', async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     
     const leaderboard = await User.find()
-      .select('username displayName avatar points')
+      .select('username displayName avatar points premium')
       .sort({ points: -1 })
       .limit(limit)
       .lean();
@@ -175,8 +175,8 @@ router.get('/transaction/:transactionCode', async (req, res) => {
     const { transactionCode } = req.params;
 
     const transaction = await Points.findOne({ transactionCode })
-      .populate('sender', 'username displayName avatar')
-      .populate('recipient', 'username displayName avatar');
+      .populate('sender', 'username displayName avatar premium')
+      .populate('recipient', 'username displayName avatar premium');
 
     if (!transaction) {
       return res.status(404).json({ message: 'Транзакция не найдена' });

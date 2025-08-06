@@ -27,7 +27,7 @@ router.get('/search', isAuth, async (req, res) => {
 
   try {
     // Вместо _id используем поле username для поиска
-    const users = await User.find({ username: new RegExp(query, 'i') }).select('username displayName avatar').lean();
+    const users = await User.find({ username: new RegExp(query, 'i') }).select('username displayName avatar premium').lean();
     if (users.length === 0) {
       return res.status(404).json({ message: 'No users found' });
     }
@@ -100,6 +100,7 @@ router.get('/suggestions', isAuth, async (req, res) => {
           username: 1,
           displayName: 1,
           avatar: 1,
+          premium: 1,
           followersCount: { $size: '$followers' }
         }
       }
@@ -121,7 +122,7 @@ router.get('/:id', isAuth, async (req, res) => {
     }
 
     const currentUserId = req.session.user.id;
-    const user = await User.findById(req.params.id).select('username displayName bio avatar followers following');
+    const user = await User.findById(req.params.id).select('username displayName bio avatar followers following premium');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     // Проверяем, подписан ли текущий пользователь на этого пользователя
@@ -133,6 +134,7 @@ router.get('/:id', isAuth, async (req, res) => {
       displayName: user.displayName,
       bio: user.bio,
       avatar: user.avatar,
+      premium: user.premium,
       followersCount: user.followers.length,
       followingCount: user.following.length,
       followed: isFollowing
@@ -154,18 +156,18 @@ router.get('/:id/posts', isAuth, async (req, res) => {
     // Получаем обычные посты пользователя
     const posts = await Post.find({ author: req.params.id })
       .sort({ createdAt: -1 })
-      .populate('author', 'username displayName avatar')
+      .populate('author', 'username displayName avatar premium')
       .lean();
 
     // Получаем репосты пользователя
     const reposts = await Repost.find({ repostedBy: req.params.id })
       .sort({ createdAt: -1 })
-      .populate('repostedBy', 'username displayName avatar')
+      .populate('repostedBy', 'username displayName avatar premium')
       .populate({
         path: 'originalPost',
         populate: {
           path: 'author',
-          select: 'username displayName avatar'
+          select: 'username displayName avatar premium'
         }
       })
       .lean();
@@ -304,7 +306,7 @@ router.put('/profile/:id', jwtAuth, async (req, res) => {
       id,
       updateData,
       { new: true, runValidators: true }
-    ).select('username displayName bio avatar');
+    ).select('username displayName bio avatar premium');
 
     if (!updatedUser) {
       return res.status(404).json({ message: 'User not found' });
@@ -317,7 +319,8 @@ router.put('/profile/:id', jwtAuth, async (req, res) => {
         username: updatedUser.username,
         displayName: updatedUser.displayName,
         bio: updatedUser.bio,
-        avatar: updatedUser.avatar
+        avatar: updatedUser.avatar,
+        premium: updatedUser.premium
       }
     });
 
