@@ -13,11 +13,14 @@ const generateTransactionCode = () => {
 // Получить баланс пользователя
 router.get('/balance', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('points username displayName');
+    const user = await User.findById(req.user.id).select('points username displayName premium premiumExpiresAt');
+    const now = new Date();
+    const isPremiumActive = user.premium && user.premiumExpiresAt && user.premiumExpiresAt > now;
     res.json({ 
       points: user.points,
       username: user.username,
-      displayName: user.displayName
+      displayName: user.displayName,
+      premiumActive: isPremiumActive
     });
   } catch (error) {
     console.error('Error fetching balance:', error);
@@ -67,7 +70,7 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
-// Перевести баллы другому пользователю
+// Перевести баллы другому пользователю (комиссия 15% без премиума, 0% с премиумом)
 router.post('/transfer', async (req, res) => {
   try {
     const { recipientUsername, amount, description } = req.body;
@@ -96,6 +99,20 @@ router.post('/transfer', async (req, res) => {
 
     // Получить текущий баланс отправителя
     const sender = await User.findById(req.user.id);
+
+    // Проверка активного премиума у отправителя
+    const now = new Date();
+    const hasPremium = sender.premium && sender.premiumExpiresAt && sender.premiumExpiresAt > now;
+
+    // Комиссия 15% если нет премиума
+    const commissionRate = hasPremium ? 0 : 0.15;
+    const commission = Math.floor(amount * commissionRate);
+    const netAmount = amount - commission;
+
+    if (netAmount <= 0) {
+      return res.status(400).json({ message: 'Сумма слишком мала с учетом комиссии' });
+    }
+
     if (sender.points < amount) {
       return res.status(400).json({ message: 'Недостаточно баллов для перевода' });
     }
@@ -106,18 +123,18 @@ router.post('/transfer', async (req, res) => {
       transactionCode,
       sender: req.user.id,
       recipient: recipient._id,
-      amount,
-      description: description || `Перевод баллов пользователю @${recipientUsername}`,
+      amount: netAmount,
+      description: description || `Перевод баллов пользователю @${recipientUsername}${commission > 0 ? ` (комиссия ${commission} баллов)` : ''}`,
       type: 'transfer',
       senderBalanceBefore: sender.points,
       senderBalanceAfter: sender.points - amount,
       recipientBalanceBefore: recipient.points,
-      recipientBalanceAfter: recipient.points + amount
+      recipientBalanceAfter: recipient.points + netAmount
     });
 
-    // Обновить балансы
+    // Обновить балансы (комиссия сгорает в системе)
     sender.points -= amount;
-    recipient.points += amount;
+    recipient.points += netAmount;
 
     // Сохранить изменения в транзакции
     await transaction.save();
@@ -252,7 +269,7 @@ router.post('/buy-premium', async (req, res) => {
   }
 });
 
-// Подарить премиум другому пользователю
+// Подарить премиум другому пользователю (запрет дарения если активен и без комиссии)
 router.post('/gift-premium', async (req, res) => {
   try {
     const { recipientUsername } = req.body;
@@ -267,6 +284,13 @@ router.post('/gift-premium', async (req, res) => {
 
     if (!recipient) {
       return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    // Запрет дарения, если у получателя уже активный премиум
+    const now = new Date();
+    const recipientHasPremium = recipient.premium && recipient.premiumExpiresAt && recipient.premiumExpiresAt > now;
+    if (recipientHasPremium) {
+      return res.status(400).json({ message: 'У получателя уже активен премиум' });
     }
 
     if (sender.points < premiumCost) {
@@ -286,7 +310,7 @@ router.post('/gift-premium', async (req, res) => {
     sender.points -= premiumCost;
     await sender.save();
 
-    // Создать транзакцию
+    // Создать транзакцию (тип premium_gift, без комиссии)
     const transactionCode = generateTransactionCode();
     const transaction = new Points({
       transactionCode,
