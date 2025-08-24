@@ -294,8 +294,26 @@ router.post('/login', async (req, res) => {
 
     // Проверяем верификацию email
     if (!user.emailVerified) {
+      // Генерируем новый код подтверждения
+      const verificationCode = generateVerificationCode();
+      const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 минут
+      
+      // Обновляем код в базе
+      user.emailVerificationCode = verificationCode;
+      user.emailVerificationExpires = verificationExpires;
+      await user.save();
+
+      // Отправляем код подтверждения
+      const emailSent = await sendVerificationEmail(user.email, verificationCode);
+      
+      if (!emailSent) {
+        return res.status(500).json({ 
+          message: 'Ошибка отправки кода подтверждения. Попробуйте еще раз' 
+        });
+      }
+
       return res.status(403).json({ 
-        message: 'Email не подтвержден. Проверьте почту и подтвердите регистрацию',
+        message: 'Email не подтвержден. Код подтверждения отправлен на ваш email',
         requiresVerification: true,
         userId: user._id.toString(),
         email: user.email // Возвращаем email из базы данных
