@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const requireAuth = require('../middleware/requireAuth');
 const { generateVerificationCode, sendVerificationEmail, resendVerificationEmail, testEmailConnection } = require('../utils/emailUtil22s');
 const router = express.Router();
 
@@ -320,6 +321,41 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Создаем новую сессию
+    const sessionId = require('crypto').randomBytes(32).toString('hex');
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const clientIP = getClientIP(req);
+    
+    // Сбрасываем флаг isCurrent для всех существующих сессий
+    user.sessions.forEach(session => {
+      session.isCurrent = false;
+    });
+    
+    // Создаем новую сессию
+    const newSession = {
+      sessionId,
+      device: `${getBrowser(userAgent)} на ${getOS(userAgent)}`,
+      deviceType: getDeviceType(userAgent),
+      browser: getBrowser(userAgent),
+      os: getOS(userAgent),
+      ip: clientIP,
+      location: 'Определяется...', // Можно добавить геолокацию
+      userAgent,
+      lastActivity: new Date(),
+      isCurrent: true,
+      createdAt: new Date()
+    };
+    
+    // Добавляем новую сессию
+    user.sessions.push(newSession);
+    
+    // Обновляем информацию о последнем входе
+    user.lastLogin = new Date();
+    user.lastLoginIP = clientIP;
+    user.lastLoginUserAgent = userAgent;
+    
+    await user.save();
+    
     // Генерируем JWT токены
     const tokens = generateTokens(user);
     
@@ -336,7 +372,9 @@ router.post('/login', async (req, res) => {
         displayName: user.displayName,
         bio: user.bio,
         avatar: user.avatar,
-        emailVerified: user.emailVerified
+        emailVerified: user.emailVerified,
+        lastLogin: user.lastLogin,
+        lastLoginIP: user.lastLoginIP
       }
     });
     
@@ -553,6 +591,137 @@ router.post('/change-email', async (req, res) => {
       message: 'Ошибка изменения email. Попробуйте еще раз', 
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+// Функция для определения типа устройства
+const getDeviceType = (userAgent) => {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
+    return 'mobile';
+  } else if (ua.includes('tablet') || ua.includes('ipad')) {
+    return 'tablet';
+  }
+  return 'desktop';
+};
+
+// Функция для определения браузера
+const getBrowser = (userAgent) => {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes('chrome')) return 'Chrome';
+  if (ua.includes('firefox')) return 'Firefox';
+  if (ua.includes('safari')) return 'Safari';
+  if (ua.includes('edge')) return 'Edge';
+  if (ua.includes('opera')) return 'Opera';
+  return 'Unknown';
+};
+
+// Функция для определения ОС
+const getOS = (userAgent) => {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes('windows')) return 'Windows';
+  if (ua.includes('mac')) return 'macOS';
+  if (ua.includes('linux')) return 'Linux';
+  if (ua.includes('android')) return 'Android';
+  if (ua.includes('ios')) return 'iOS';
+  return 'Unknown';
+};
+
+// Функция для получения IP адреса
+const getClientIP = (req) => {
+  return req.headers['x-forwarded-for'] || 
+         req.connection.remoteAddress || 
+         req.socket.remoteAddress ||
+         (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+         req.ip;
+};
+
+// Получить все сессии пользователя
+router.get('/sessions', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    // Очищаем старые сессии (старше 30 дней)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    user.sessions = user.sessions.filter(session => 
+      session.lastActivity > thirtyDaysAgo
+    );
+    await user.save();
+
+    res.json({ 
+      sessions: user.sessions,
+      totalSessions: user.sessions.length
+    });
+  } catch (error) {
+    console.error('Get sessions error:', error);
+    res.status(500).json({ message: 'Ошибка получения сессий' });
+  }
+});
+
+// Завершить конкретную сессию
+router.delete('/sessions/:sessionId', requireAuth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    // Удаляем сессию
+    user.sessions = user.sessions.filter(session => session.sessionId !== sessionId);
+    await user.save();
+
+    res.json({ message: 'Сессия успешно завершена' });
+  } catch (error) {
+    console.error('Terminate session error:', error);
+    res.status(500).json({ message: 'Ошибка завершения сессии' });
+  }
+});
+
+// Завершить все сессии кроме текущей
+router.delete('/sessions/all', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    // Оставляем только текущую сессию
+    const currentSession = user.sessions.find(session => session.isCurrent);
+    user.sessions = currentSession ? [currentSession] : [];
+    await user.save();
+
+    res.json({ message: 'Все сессии успешно завершены' });
+  } catch (error) {
+    console.error('Terminate all sessions error:', error);
+    res.status(500).json({ message: 'Ошибка завершения всех сессий' });
+  }
+});
+
+// Обновить активность сессии
+router.put('/sessions/activity', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    // Обновляем активность текущей сессии
+    const currentSession = user.sessions.find(session => session.isCurrent);
+    if (currentSession) {
+      currentSession.lastActivity = new Date();
+      await user.save();
+    }
+
+    res.json({ message: 'Активность обновлена' });
+  } catch (error) {
+    console.error('Update session activity error:', error);
+    res.status(500).json({ message: 'Ошибка обновления активности' });
   }
 });
 
