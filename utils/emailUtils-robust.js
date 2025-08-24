@@ -143,7 +143,7 @@ const sendVerificationEmail = async (email, code) => {
             </div>
             
             <div style="background: #333; color: white; padding: 15px; text-align: center; font-size: 12px;">
-              <p style="margin: 0;">© 2024 SocialSpace. Все права защищены.</p>
+              <p style="margin: 0;">© 2025 SocialSpace. Все права защищены.</p>
             </div>
           </div>
         `
