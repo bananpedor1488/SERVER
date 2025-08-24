@@ -449,4 +449,89 @@ router.get('/test-email', async (req, res) => {
   }
 });
 
+// Change email endpoint
+router.post('/change-email', async (req, res) => {
+  try {
+    const { userId, newEmail } = req.body;
+    
+    if (!userId || !newEmail) {
+      return res.status(400).json({ 
+        message: 'ID пользователя и новый email обязательны' 
+      });
+    }
+
+    // Валидация email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      return res.status(400).json({ 
+        message: 'Введите корректный email адрес' 
+      });
+    }
+
+    // Находим пользователя
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'Пользователь не найден' 
+      });
+    }
+
+    // Проверяем, не верифицирован ли уже email
+    if (user.emailVerified) {
+      return res.status(400).json({ 
+        message: 'Email уже подтвержден' 
+      });
+    }
+
+    // Проверяем, не занят ли новый email другим пользователем
+    const existingUser = await User.findOne({ 
+      email: newEmail.toLowerCase(),
+      _id: { $ne: userId } // Исключаем текущего пользователя
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'Пользователь с таким email уже существует' 
+      });
+    }
+
+    // Генерируем новый код подтверждения
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 минут
+    
+    // Обновляем email и код
+    user.email = newEmail.toLowerCase();
+    user.emailVerified = false;
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = verificationExpires;
+    await user.save();
+
+    // Отправляем новый код на новый email
+    const emailSent = await sendVerificationEmail(newEmail, verificationCode);
+    
+    if (!emailSent) {
+      // Если email не отправлен, откатываем изменения
+      user.email = user.email; // Возвращаем старый email
+      await user.save();
+      return res.status(500).json({ 
+        message: 'Ошибка отправки кода подтверждения. Попробуйте еще раз' 
+      });
+    }
+    
+    console.log('Email changed successfully for user:', user.username);
+    
+    res.json({ 
+      message: 'Email изменен. Новый код подтверждения отправлен',
+      email: newEmail
+    });
+    
+  } catch (error) {
+    console.error('Change email error:', error);
+    res.status(500).json({ 
+      message: 'Ошибка изменения email. Попробуйте еще раз', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;
