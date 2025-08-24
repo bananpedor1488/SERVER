@@ -1,8 +1,28 @@
 // Реальная версия emailUtils с nodemailer
 console.log('🔧 Loading emailUtils.js (real email sending)...');
 
-// Импорт nodemailer
-const nodemailer = require('nodemailer');
+// Импорт nodemailer с проверкой
+let nodemailer;
+
+try {
+  nodemailer = require('nodemailer');
+  console.log('✅ Nodemailer imported successfully');
+} catch (error) {
+  console.error('❌ Failed to import nodemailer:', error.message);
+  throw new Error('Nodemailer is not installed. Please run: npm install nodemailer@6.9.7');
+}
+
+// Проверяем, что nodemailer работает
+if (!nodemailer) {
+  console.error('❌ Nodemailer is null or undefined');
+  throw new Error('Nodemailer import failed');
+}
+
+if (typeof nodemailer.createTransporter !== 'function') {
+  console.error('❌ nodemailer.createTransporter is not a function');
+  console.error('Available methods:', Object.keys(nodemailer || {}));
+  throw new Error('Nodemailer is not properly configured');
+}
 
 console.log('📦 Nodemailer loaded:', {
   type: typeof nodemailer,
