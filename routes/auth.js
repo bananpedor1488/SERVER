@@ -297,7 +297,8 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ 
         message: 'Email не подтвержден. Проверьте почту и подтвердите регистрацию',
         requiresVerification: true,
-        userId: user._id.toString()
+        userId: user._id.toString(),
+        email: user.email // Возвращаем email из базы данных
       });
     }
 
