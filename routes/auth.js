@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { generateVerificationCode, sendVerificationEmail, resendVerificationEmail, testEmailConnection } = require('../utils/emailUtils');
+const { generateVerificationCode, sendVerificationEmail, resendVerificationEmail, testEmailConnection } = require('../utils/emailUtil22s');
 const router = express.Router();
 
 // Функция для генерации JWT токенов
@@ -409,42 +409,45 @@ router.get('/status', (req, res) => {
   });
 });
 
-// Test email connection endpoint
+// Тестовый endpoint для проверки email
 router.get('/test-email', async (req, res) => {
   try {
-    console.log('🧪 Testing email connection...');
+    console.log('🧪 Testing email configuration...');
     
-    const isConnected = await testEmailConnection();
+    // Проверяем переменные окружения
+    console.log('📋 Environment variables:');
+    console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Missing');
+    console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing');
     
-    if (isConnected) {
-      res.json({ 
-        success: true, 
-        message: 'Email connection is working properly',
-        config: {
-          emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Missing',
-          emailPassword: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing'
-        }
-      });
-    } else {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Email connection failed. Check your configuration.',
-        config: {
-          emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Missing',
-          emailPassword: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing'
-        }
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      return res.status(400).json({
+        error: 'Email configuration missing',
+        EMAIL_USER: !!process.env.EMAIL_USER,
+        EMAIL_PASSWORD: !!process.env.EMAIL_PASSWORD
       });
     }
+    
+    // Тестируем подключение
+    const testResult = await testEmailConnection();
+    
+    if (testResult) {
+      res.json({
+        success: true,
+        message: 'Email configuration is working',
+        email: process.env.EMAIL_USER
+      });
+    } else {
+      res.status(500).json({
+        error: 'Email connection failed',
+        email: process.env.EMAIL_USER
+      });
+    }
+    
   } catch (error) {
     console.error('❌ Email test error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Email test failed',
-      error: error.message,
-      config: {
-        emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Missing',
-        emailPassword: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing'
-      }
+    res.status(500).json({
+      error: 'Email test failed',
+      message: error.message
     });
   }
 });
