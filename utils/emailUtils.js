@@ -1,5 +1,14 @@
 const nodemailer = require('nodemailer');
 
+// Проверяем, что nodemailer импортирован правильно
+if (!nodemailer || typeof nodemailer.createTransporter !== 'function') {
+  console.error('❌ Nodemailer import error:', {
+    nodemailer: typeof nodemailer,
+    createTransporter: typeof nodemailer?.createTransporter
+  });
+  throw new Error('Nodemailer is not properly imported. Please check installation.');
+}
+
 // Генерация случайного кода подтверждения
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -21,13 +30,21 @@ const createTransporter = () => {
     password: process.env.EMAIL_PASSWORD ? '***' : 'Missing'
   });
 
-  return nodemailer.createTransporter({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD
-    }
-  });
+  try {
+    const transporter = nodemailer.createTransporter({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+      }
+    });
+    
+    console.log('✅ Email transporter created successfully');
+    return transporter;
+  } catch (error) {
+    console.error('❌ Error creating email transporter:', error);
+    throw error;
+  }
 };
 
 // Проверка подключения к email сервису
