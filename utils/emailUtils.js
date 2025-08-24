@@ -18,15 +18,15 @@ if (!nodemailer) {
   throw new Error('Nodemailer import failed');
 }
 
-if (typeof nodemailer.createTransporter !== 'function') {
-  console.error('❌ nodemailer.createTransporter is not a function');
+if (typeof nodemailer.createTransport !== 'function') {
+  console.error('❌ nodemailer.createTransport is not a function');
   console.error('Available methods:', Object.keys(nodemailer || {}));
   throw new Error('Nodemailer is not properly configured');
 }
 
 console.log('📦 Nodemailer loaded:', {
   type: typeof nodemailer,
-  hasCreateTransporter: typeof nodemailer.createTransporter === 'function',
+      hasCreateTransport: typeof nodemailer.createTransport === 'function',
   version: nodemailer.version || 'unknown'
 });
 
@@ -48,7 +48,7 @@ const createTransporter = () => {
   console.log('📧 Creating email transporter...');
 
   try {
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,

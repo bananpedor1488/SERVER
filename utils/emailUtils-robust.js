@@ -9,9 +9,9 @@ try {
   nodemailer = require('nodemailer');
   console.log('✅ Nodemailer imported successfully');
   
-  // Проверяем, что createTransporter доступен
-  if (typeof nodemailer.createTransporter !== 'function') {
-    console.warn('⚠️  nodemailer.createTransporter is not a function, using fallback');
+  // Проверяем, что createTransport доступен
+if (typeof nodemailer.createTransport !== 'function') {
+  console.warn('⚠️  nodemailer.createTransport is not a function, using fallback');
     useFallback = true;
   }
 } catch (error) {
@@ -62,7 +62,7 @@ const createTransporter = () => {
   console.log('📧 Creating email transporter...');
 
   try {
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,

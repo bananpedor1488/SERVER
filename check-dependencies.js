@@ -6,12 +6,12 @@ try {
   console.log('✅ Nodemailer is installed');
   console.log('   Version:', nodemailer.version || 'unknown');
   console.log('   Type:', typeof nodemailer);
-  console.log('   createTransporter:', typeof nodemailer.createTransporter);
-  
-  if (typeof nodemailer.createTransporter === 'function') {
-    console.log('✅ createTransporter is available');
-  } else {
-    console.log('❌ createTransporter is not available');
+  console.log('   createTransport:', typeof nodemailer.createTransport);
+
+if (typeof nodemailer.createTransport === 'function') {
+  console.log('✅ createTransport is available');
+} else {
+  console.log('❌ createTransport is not available');
   }
 } catch (error) {
   console.log('❌ Nodemailer is NOT installed:', error.message);

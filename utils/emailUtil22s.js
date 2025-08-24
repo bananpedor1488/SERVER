@@ -13,11 +13,11 @@ if (!nodemailer) {
   throw new Error('Nodemailer is not properly imported. Please check installation.');
 }
 
-// Проверяем доступность createTransporter
-if (typeof nodemailer.createTransporter !== 'function') {
+// Проверяем доступность createTransport
+if (typeof nodemailer.createTransport !== 'function') {
   console.error('❌ Nodemailer import error:', {
     nodemailer: typeof nodemailer,
-    createTransporter: typeof nodemailer?.createTransporter,
+    createTransport: typeof nodemailer?.createTransport,
     nodemailerKeys: Object.keys(nodemailer || {})
   });
   
@@ -53,7 +53,7 @@ const createTransporter = () => {
   });
 
   try {
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,

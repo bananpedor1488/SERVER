@@ -7,9 +7,9 @@ try {
   
   console.log('📦 Nodemailer version:', nodemailer.version);
   console.log('📦 Nodemailer type:', typeof nodemailer);
-  console.log('📦 createTransporter type:', typeof nodemailer.createTransporter);
-  
-  if (typeof nodemailer.createTransporter === 'function') {
+  console.log('📦 createTransport type:', typeof nodemailer.createTransport);
+
+if (typeof nodemailer.createTransport === 'function') {
     console.log('✅ Nodemailer is properly installed and imported!');
     
     // Проверяем переменные окружения
@@ -20,7 +20,7 @@ try {
     if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
       console.log('\n🔧 Attempting to create transporter...');
       
-      const transporter = nodemailer.createTransporter({
+      const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
           user: process.env.EMAIL_USER,
@@ -47,7 +47,7 @@ try {
     }
     
   } else {
-    console.log('❌ Nodemailer.createTransporter is not a function!');
+    console.log('❌ Nodemailer.createTransport is not a function!');
     console.log('This might indicate an installation issue.');
     process.exit(1);
   }
