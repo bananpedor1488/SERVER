@@ -1,10 +1,60 @@
-// Упрощенная версия emailUtils для тестирования
-console.log('🔧 Loading emailUtils-simple.js...');
+// Альтернативная версия emailUtils с исправленным импортом
+console.log('🔧 Loading emailUtils.js...');
 
-// Простой импорт nodemailer
-const nodemailer = require('nodemailer');
+// Попробуем разные способы импорта nodemailer
+let nodemailer;
 
-console.log('📦 Nodemailer loaded:', {
+try {
+  // Способ 1: Обычный импорт
+  nodemailer = require('nodemailer');
+  console.log('✅ Nodemailer imported normally');
+} catch (error) {
+  console.log('❌ Normal import failed:', error.message);
+  
+  try {
+    // Способ 2: Импорт с .default
+    nodemailer = require('nodemailer').default;
+    console.log('✅ Nodemailer imported with .default');
+  } catch (error2) {
+    console.log('❌ .default import failed:', error2.message);
+    
+    try {
+      // Способ 3: Динамический импорт
+      const nodemailerModule = require('nodemailer');
+      nodemailer = nodemailerModule.default || nodemailerModule;
+      console.log('✅ Nodemailer imported dynamically');
+    } catch (error3) {
+      console.log('❌ Dynamic import failed:', error3.message);
+      throw new Error('Failed to import nodemailer. Please install it: npm install nodemailer@6.9.7');
+    }
+  }
+}
+
+// Проверяем, что nodemailer работает
+if (!nodemailer || typeof nodemailer.createTransporter !== 'function') {
+  console.error('❌ Nodemailer is not working properly:', {
+    nodemailer: typeof nodemailer,
+    createTransporter: typeof nodemailer?.createTransporter,
+    availableMethods: nodemailer ? Object.keys(nodemailer) : 'nodemailer is null'
+  });
+  
+  // Попробуем создать транспортер напрямую
+  try {
+    const testTransporter = nodemailer.createTransporter({
+      service: 'gmail',
+      auth: {
+        user: 'test@test.com',
+        pass: 'test'
+      }
+    });
+    console.log('✅ Test transporter created successfully');
+  } catch (testError) {
+    console.error('❌ Test transporter failed:', testError.message);
+    throw new Error('Nodemailer is not properly configured. Please check installation.');
+  }
+}
+
+console.log('📦 Nodemailer loaded successfully:', {
   type: typeof nodemailer,
   hasCreateTransporter: typeof nodemailer.createTransporter === 'function',
   version: nodemailer.version || 'unknown'
