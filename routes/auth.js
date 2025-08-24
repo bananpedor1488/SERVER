@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { generateVerificationCode, sendVerificationEmail, resendVerificationEmail, testEmailConnection } = require('../utils/emailUtils');
 const router = express.Router();
 
 // Функция для генерации JWT токенов
@@ -34,7 +35,7 @@ router.use((req, res, next) => {
   next();
 });
 
-// Register
+// Register - первый этап (создание пользователя и отправка кода)
 router.post('/register', async (req, res) => {
   try {
     console.log('Registration attempt:', { username: req.body.username, email: req.body.email });
@@ -77,20 +78,101 @@ router.post('/register', async (req, res) => {
     // Хешируем пароль
     const hash = await bcrypt.hash(password, 12);
     
-    // Создаем пользователя
+    // Генерируем код подтверждения
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 минут
+    
+    // Создаем пользователя (не верифицированного)
     const user = await User.create({ 
       username, 
       email: email.toLowerCase(), 
-      password: hash 
+      password: hash,
+      emailVerified: false,
+      emailVerificationCode: verificationCode,
+      emailVerificationExpires: verificationExpires
     });
     
+    // Отправляем код подтверждения на email
+    const emailSent = await sendVerificationEmail(email, verificationCode);
+    
+    if (!emailSent) {
+      // Если email не отправлен, удаляем пользователя
+      await User.findByIdAndDelete(user._id);
+      return res.status(500).json({ 
+        message: 'Ошибка отправки кода подтверждения. Попробуйте еще раз' 
+      });
+    }
+    
+    console.log('User registered successfully, verification code sent:', user.username);
+    
+    res.status(201).json({ 
+      message: 'Код подтверждения отправлен на ваш email',
+      userId: user._id.toString(),
+      email: user.email,
+      requiresVerification: true
+    });
+    
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ 
+      message: 'Ошибка регистрации. Попробуйте еще раз', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Verify email - второй этап (подтверждение кода)
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { userId, code } = req.body;
+    
+    if (!userId || !code) {
+      return res.status(400).json({ 
+        message: 'ID пользователя и код подтверждения обязательны' 
+      });
+    }
+
+    // Находим пользователя
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'Пользователь не найден' 
+      });
+    }
+
+    // Проверяем, не верифицирован ли уже email
+    if (user.emailVerified) {
+      return res.status(400).json({ 
+        message: 'Email уже подтвержден' 
+      });
+    }
+
+    // Проверяем код и время истечения
+    if (!user.emailVerificationCode || user.emailVerificationCode !== code) {
+      return res.status(400).json({ 
+        message: 'Неверный код подтверждения' 
+      });
+    }
+
+    if (new Date() > user.emailVerificationExpires) {
+      return res.status(400).json({ 
+        message: 'Код подтверждения истек. Запросите новый код' 
+      });
+    }
+
+    // Подтверждаем email
+    user.emailVerified = true;
+    user.emailVerificationCode = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
     // Генерируем JWT токены
     const tokens = generateTokens(user);
     
-    console.log('User registered successfully:', user.username);
+    console.log('Email verified successfully:', user.username);
     
-    res.status(201).json({ 
-      message: 'Регистрация прошла успешно',
+    res.json({ 
+      message: 'Email подтвержден успешно',
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: {
@@ -99,14 +181,74 @@ router.post('/register', async (req, res) => {
         email: user.email,
         displayName: user.displayName,
         bio: user.bio,
-        avatar: user.avatar
+        avatar: user.avatar,
+        emailVerified: user.emailVerified
       }
     });
     
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Email verification error:', error);
     res.status(500).json({ 
-      message: 'Ошибка регистрации. Попробуйте еще раз', 
+      message: 'Ошибка подтверждения email. Попробуйте еще раз', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Resend verification code
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        message: 'ID пользователя обязателен' 
+      });
+    }
+
+    // Находим пользователя
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'Пользователь не найден' 
+      });
+    }
+
+    // Проверяем, не верифицирован ли уже email
+    if (user.emailVerified) {
+      return res.status(400).json({ 
+        message: 'Email уже подтвержден' 
+      });
+    }
+
+    // Генерируем новый код
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 минут
+    
+    // Обновляем код в базе
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = verificationExpires;
+    await user.save();
+
+    // Отправляем новый код
+    const emailSent = await resendVerificationEmail(user.email, verificationCode);
+    
+    if (!emailSent) {
+      return res.status(500).json({ 
+        message: 'Ошибка отправки кода подтверждения. Попробуйте еще раз' 
+      });
+    }
+    
+    console.log('Verification code resent for user:', user.username);
+    
+    res.json({ 
+      message: 'Новый код подтверждения отправлен на ваш email'
+    });
+    
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ 
+      message: 'Ошибка отправки кода. Попробуйте еще раз', 
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -150,6 +292,15 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Проверяем верификацию email
+    if (!user.emailVerified) {
+      return res.status(403).json({ 
+        message: 'Email не подтвержден. Проверьте почту и подтвердите регистрацию',
+        requiresVerification: true,
+        userId: user._id.toString()
+      });
+    }
+
     // Генерируем JWT токены
     const tokens = generateTokens(user);
     
@@ -165,7 +316,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         displayName: user.displayName,
         bio: user.bio,
-        avatar: user.avatar
+        avatar: user.avatar,
+        emailVerified: user.emailVerified
       }
     });
     
@@ -255,6 +407,46 @@ router.get('/status', (req, res) => {
       }
     });
   });
+});
+
+// Test email connection endpoint
+router.get('/test-email', async (req, res) => {
+  try {
+    console.log('🧪 Testing email connection...');
+    
+    const isConnected = await testEmailConnection();
+    
+    if (isConnected) {
+      res.json({ 
+        success: true, 
+        message: 'Email connection is working properly',
+        config: {
+          emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Missing',
+          emailPassword: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing'
+        }
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        message: 'Email connection failed. Check your configuration.',
+        config: {
+          emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Missing',
+          emailPassword: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Email test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Email test failed',
+      error: error.message,
+      config: {
+        emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Missing',
+        emailPassword: process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing'
+      }
+    });
+  }
 });
 
 module.exports = router;

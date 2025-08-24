@@ -23,6 +23,11 @@ const UserSchema = new mongoose.Schema({
   // Премиум система
   premium: { type: Boolean, default: false }, // Премиум статус
   premiumExpiresAt: { type: Date }, // Дата окончания премиума
+  
+  // Верификация email
+  emailVerified: { type: Boolean, default: false }, // Статус верификации email
+  emailVerificationCode: { type: String }, // Код подтверждения
+  emailVerificationExpires: { type: Date }, // Время истечения кода
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);
