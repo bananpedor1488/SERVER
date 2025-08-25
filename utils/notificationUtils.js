@@ -55,18 +55,11 @@ const sendFollowNotification = async (follower, followedUser) => {
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = follower.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + follower.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Новая подписка!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${follower.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${follower.username}</strong> подписался на ваш профиль.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${follower.username}</strong> подписался на ваш профиль.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Подписчик:</strong> ${follower.username}<br>
@@ -97,18 +90,11 @@ const sendLikeNotification = async (liker, postAuthor, post) => {
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = liker.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + liker.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Новый лайк!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${liker.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${liker.username}</strong> поставил лайк вашему посту.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${liker.username}</strong> поставил лайк вашему посту.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Пост:</strong> ${post.content.substring(0, 100)}${post.content.length > 100 ? '...' : ''}<br>
@@ -140,18 +126,11 @@ const sendCommentNotification = async (commenter, postAuthor, post, comment) => 
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = commenter.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + commenter.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Новый комментарий!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${commenter.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${commenter.username}</strong> прокомментировал ваш пост.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${commenter.username}</strong> прокомментировал ваш пост.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Пост:</strong> ${post.content.substring(0, 100)}${post.content.length > 100 ? '...' : ''}<br>
@@ -184,18 +163,11 @@ const sendRepostNotification = async (reposter, originalAuthor, post) => {
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = reposter.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + reposter.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Ваш пост репостнули!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${reposter.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${reposter.username}</strong> репостнул ваш пост.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${reposter.username}</strong> репостнул ваш пост.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Пост:</strong> ${post.content.substring(0, 100)}${post.content.length > 100 ? '...' : ''}<br>
@@ -227,18 +199,11 @@ const sendMessageNotification = async (sender, recipient, message) => {
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = sender.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + sender.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Новое сообщение!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${sender.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${sender.username}</strong> отправил вам сообщение.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${sender.username}</strong> отправил вам сообщение.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Сообщение:</strong> ${message.content.substring(0, 150)}${message.content.length > 150 ? '...' : ''}<br>
@@ -270,18 +235,11 @@ const sendMissedCallNotification = async (caller, recipient) => {
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = caller.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + caller.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Пропущенный звонок!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${caller.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${caller.username}</strong> звонил вам, но вы не ответили.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${caller.username}</strong> звонил вам, но вы не ответили.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Звонил:</strong> ${caller.username}<br>
@@ -350,18 +308,11 @@ const sendTransferNotification = async (sender, recipient, amount, description) 
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = sender.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + sender.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Перевод средств!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${sender.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${sender.username}</strong> перевел вам средства.
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${sender.username}</strong> перевел вам средства.
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Сумма:</strong> ${amount} монет<br>
@@ -394,18 +345,11 @@ const sendPremiumGiftNotification = async (sender, recipient) => {
   try {
     const transporter = createTransporter();
     
-    const avatarUrl = sender.avatar || 'https://via.placeholder.com/60x60/667eea/ffffff?text=' + sender.username.charAt(0).toUpperCase();
-    
     const content = `
       <h2 style="color: #333; margin-bottom: 20px;">Подарок премиум!</h2>
-      <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="${avatarUrl}" alt="${sender.username}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; border: 3px solid #667eea;">
-        <div>
-          <p style="color: #666; line-height: 1.6; margin: 0;">
-            <strong style="color: #333;">${sender.username}</strong> подарил вам премиум статус!
-          </p>
-        </div>
-      </div>
+      <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+        <strong>${sender.username}</strong> подарил вам премиум статус!
+      </p>
       <div style="background: white; border-radius: 8px; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #333;">
           <strong>Подарок:</strong> Премиум статус<br>
