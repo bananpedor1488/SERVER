@@ -40,7 +40,7 @@ bot.onText(/\/start/, async (msg) => {
   const welcomeMessage = `
 🤖 **Добро пожаловать в SocialSpace!**
 
-Для верификации номера телефона, пожалуйста, нажмите кнопку ниже и отправьте свой контакт.
+Для автоматической верификации номера телефона, пожалуйста, нажмите кнопку ниже и отправьте свой контакт.
 
 📱 Это необходимо для:
 • Безопасности аккаунта
@@ -48,6 +48,7 @@ bot.onText(/\/start/, async (msg) => {
 • Подтверждения личности
 
 _Ваш номер будет использоваться только для верификации._
+_После отправки контакта верификация произойдет автоматически!_
   `;
   
   const keyboard = {
@@ -64,7 +65,7 @@ _Ваш номер будет использоваться только для �
   };
   
   bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
-  bot.sendMessage(chatId, 'Нажмите кнопку для отправки контакта:', keyboard);
+  bot.sendMessage(chatId, 'Нажмите кнопку для автоматической верификации:', keyboard);
 });
 
 // Обработка получения контакта
@@ -106,29 +107,27 @@ bot.on('contact', async (msg) => {
       timestamp: Date.now()
     });
     
-    const confirmMessage = `
-✅ **Номер получен!**
+    const successMessage = `
+🎉 **Верификация успешно завершена!**
 
-📱 Ваш номер: +${phoneNumber}
+✅ Ваш номер телефона +${phoneNumber} автоматически подтвержден.
 
-Теперь перейдите на сайт SocialSpace и введите этот код для завершения верификации:
+Теперь вы можете вернуться на сайт SocialSpace - ваш номер уже верифицирован!
 
-🔐 **Код верификации:** \`${chatId}\`
-
-⚠️ **Важно:** 
-• Код действителен 10 минут
-• Введите код на сайте в разделе "Верификация телефона"
-• Не передавайте код третьим лицам
-  `;
+Спасибо за использование нашего сервиса! 🚀
+    `;
     
-    bot.sendMessage(chatId, confirmMessage, { 
+    bot.sendMessage(chatId, successMessage, { 
       parse_mode: 'Markdown',
       reply_markup: {
         remove_keyboard: true
       }
     });
     
-    console.log(`✅ Verification code ${chatId} generated for ${phoneNumber}`);
+    console.log(`✅ Auto-verification completed for ${phoneNumber} (chatId: ${chatId})`);
+    
+    // Автоматически верифицируем номер для всех пользователей с этим chatId
+    await autoVerifyPhoneNumber(chatId, phoneNumber);
     
   } catch (error) {
     console.error('❌ Error processing contact:', error);
@@ -239,6 +238,37 @@ const getVerificationStatus = async (userId) => {
   }
 };
 
+// Функция для автоматической верификации номера телефона
+const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
+  try {
+    // Находим пользователя по chatId (если он был сохранен)
+    // Или верифицируем номер для всех пользователей с этим номером
+    const users = await User.find({ 
+      phoneNumber: phoneNumber,
+      phoneVerified: false 
+    });
+    
+    if (users.length > 0) {
+      // Верифицируем всех пользователей с этим номером
+      for (const user of users) {
+        user.phoneVerified = true;
+        user.phoneVerifiedAt = new Date();
+        await user.save();
+        
+        console.log(`✅ Auto-verified phone for user ${user.username} (${user._id}): ${phoneNumber}`);
+      }
+    } else {
+      // Если пользователь не найден, сохраняем информацию для последующей верификации
+      console.log(`📝 Phone number ${phoneNumber} ready for verification (chatId: ${chatId})`);
+    }
+    
+    return { success: true, message: 'Номер телефона автоматически верифицирован' };
+  } catch (error) {
+    console.error('❌ Error auto-verifying phone number:', error);
+    return { success: false, message: 'Ошибка при автоматической верификации' };
+  }
+};
+
 // Очистка устаревших кодов каждые 5 минут
 setInterval(() => {
   const now = Date.now();
@@ -289,12 +319,34 @@ const startBot = async () => {
   }
 };
 
+// Функция для связывания пользователя с chatId
+const linkUserToChat = async (userId, chatId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      return { success: false, message: 'Пользователь не найден' };
+    }
+    
+    // Сохраняем chatId в пользователе для автоматической верификации
+    user.telegramChatId = chatId;
+    await user.save();
+    
+    console.log(`🔗 Linked user ${user.username} (${userId}) to chatId ${chatId}`);
+    return { success: true, message: 'Пользователь связан с Telegram' };
+  } catch (error) {
+    console.error('❌ Error linking user to chat:', error);
+    return { success: false, message: 'Ошибка при связывании пользователя' };
+  }
+};
+
 // Экспорт функций для использования в других модулях
 module.exports = {
   bot,
   verifyCode,
   getVerificationStatus,
-  startBot
+  startBot,
+  linkUserToChat,
+  autoVerifyPhoneNumber
 };
 
 // Бот теперь запускается из основного сервера

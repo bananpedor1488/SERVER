@@ -33,6 +33,7 @@ const UserSchema = new mongoose.Schema({
   phoneNumber: { type: String }, // Номер телефона
   phoneVerified: { type: Boolean, default: false }, // Статус верификации телефона
   phoneVerifiedAt: { type: Date }, // Дата верификации телефона
+  telegramChatId: { type: String }, // Chat ID в Telegram для автоматической верификации
   
   // Отслеживание входа и сессий
   lastLogin: { type: Date }, // Последний вход

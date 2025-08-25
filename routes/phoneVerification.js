@@ -1,7 +1,7 @@
 // Маршруты для верификации номера телефона
 const express = require('express');
 const router = express.Router();
-const { verifyCode, getVerificationStatus } = require('../telegram-bot');
+const { verifyCode, getVerificationStatus, linkUserToChat, autoVerifyPhoneNumber } = require('../telegram-bot');
 
 // Получить статус верификации телефона
 router.get('/status', async (req, res) => {
@@ -92,36 +92,32 @@ router.get('/instructions', async (req, res) => {
     const instructions = {
       success: true,
       verified: false,
-      message: 'Инструкции по верификации номера телефона',
+      message: 'Инструкции по автоматической верификации номера телефона',
       steps: [
         {
           step: 1,
-          title: 'Откройте Telegram',
-          description: 'Перейдите в приложение Telegram на вашем устройстве'
+          title: 'Нажмите кнопку "Перейти в бота"',
+          description: 'Откроется Telegram с нашим ботом'
         },
-                 {
-           step: 2,
-           title: 'Найдите нашего бота',
-           description: 'Найдите бота @SocialSpaceWEB_bot или перейдите по ссылке'
-         },
+        {
+          step: 2,
+          title: 'Отправьте команду /start',
+          description: 'Бот покажет приветственное сообщение'
+        },
         {
           step: 3,
-          title: 'Отправьте контакт',
-          description: 'Нажмите кнопку "📱 Отправить номер телефона" и подтвердите отправку'
+          title: 'Нажмите кнопку "📱 Отправить номер телефона"',
+          description: 'Подтвердите отправку вашего контакта'
         },
         {
           step: 4,
-          title: 'Получите код',
-          description: 'Бот отправит вам код верификации (действителен 10 минут)'
-        },
-        {
-          step: 5,
-          title: 'Введите код на сайте',
-          description: 'Вернитесь на сайт и введите полученный код в поле ниже'
+          title: 'Верификация завершена!',
+          description: 'Вернитесь на сайт - ваш номер уже верифицирован автоматически'
         }
       ],
-             botUsername: 'SocialSpaceWEB_bot',
-       botLink: 'https://t.me/SocialSpaceWEB_bot'
+      botUsername: 'SocialSpaceWEB_bot',
+      botLink: 'https://t.me/SocialSpaceWEB_bot',
+      autoVerification: true
     };
     
     res.json(instructions);
@@ -131,6 +127,40 @@ router.get('/instructions', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Ошибка сервера при получении инструкций' 
+    });
+  }
+});
+
+// Инициация автоматической верификации
+router.post('/start-auto-verification', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Генерируем уникальный chatId для пользователя
+    const chatId = `user_${userId}_${Date.now()}`;
+    
+    // Связываем пользователя с chatId
+    const linkResult = await linkUserToChat(userId, chatId);
+    
+    if (!linkResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: linkResult.message
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Автоматическая верификация инициирована',
+      botLink: 'https://t.me/SocialSpaceWEB_bot',
+      chatId: chatId
+    });
+    
+  } catch (error) {
+    console.error('❌ Error starting auto-verification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка сервера при инициации верификации'
     });
   }
 });
