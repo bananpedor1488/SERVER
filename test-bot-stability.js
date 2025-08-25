@@ -1,9 +1,9 @@
-const { Telegraf } = require('telegraf');
+const TelegramBot = require('node-telegram-bot-api');
 require('dotenv').config();
 
 // Тестовый скрипт для проверки стабильности Telegram бота
 async function testBotStability() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN || '8481849743:AAHOM7yAhs3evhou_rHxR5ktJwVsWxZfwrc';
   
   if (!token) {
     console.error('❌ TELEGRAM_BOT_TOKEN не найден в переменных окружения');
@@ -13,12 +13,12 @@ async function testBotStability() {
   console.log('🔍 Тестирование стабильности Telegram бота...');
   console.log('Token:', token ? `${token.substring(0, 10)}...` : 'NOT SET');
   
-  const bot = new Telegraf(token);
+  const bot = new TelegramBot(token, { polling: false }); // Создаем без polling для тестирования
   
   try {
     // Тест 1: Проверка создания экземпляра бота
     console.log('\n1. Тестирование создания экземпляра бота...');
-    if (bot && typeof bot.launch === 'function') {
+    if (bot && typeof bot.getMe === 'function') {
       console.log('✅ Экземпляр бота создан успешно');
     } else {
       console.log('❌ Ошибка создания экземпляра бота');
@@ -40,35 +40,53 @@ async function testBotStability() {
       console.log('❌ bot.stopWebhook() недоступен');
     }
     
-    if (typeof bot.stop === 'function') {
-      console.log('✅ bot.stop() доступен');
+    if (typeof bot.close === 'function') {
+      console.log('✅ bot.close() доступен');
     } else {
-      console.log('❌ bot.stop() недоступен (это нормально для Telegraf)');
+      console.log('❌ bot.close() недоступен');
     }
     
-    // Тест 3: Проверка запуска и остановки
-    console.log('\n3. Тестирование запуска и остановки...');
+    // Тест 3: Проверка подключения к API
+    console.log('\n3. Тестирование подключения к API...');
     
     try {
-      console.log('🚀 Запуск бота...');
-      await bot.launch();
-      console.log('✅ Бот запущен успешно');
-      
-      // Ждем немного
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('🛑 Остановка бота...');
-      bot.stopPolling();
-      console.log('✅ Бот остановлен успешно');
+      console.log('🚀 Проверка подключения к Telegram API...');
+      const me = await bot.getMe();
+      console.log('✅ Подключение к API успешно');
+      console.log(`🤖 Bot info: @${me.username} (${me.first_name})`);
       
     } catch (error) {
-      console.error('❌ Ошибка при запуске/остановке бота:', error.message);
+      console.error('❌ Ошибка при подключении к API:', error.message);
+    }
+    
+    // Тест 4: Проверка запуска и остановки polling
+    console.log('\n4. Тестирование запуска и остановки polling...');
+    
+    try {
+      console.log('🚀 Запуск polling...');
+      bot.startPolling();
+      console.log('✅ Polling запущен успешно');
+      
+      // Ждем немного
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      console.log('🛑 Остановка polling...');
+      bot.stopPolling();
+      console.log('✅ Polling остановлен успешно');
+      
+    } catch (error) {
+      console.error('❌ Ошибка при запуске/остановке polling:', error.message);
     }
     
     console.log('\n🎉 Тестирование завершено!');
     
   } catch (error) {
     console.error('❌ Ошибка при тестировании:', error.message);
+  } finally {
+    // Закрываем соединение
+    if (bot && typeof bot.close === 'function') {
+      bot.close();
+    }
   }
 }
 

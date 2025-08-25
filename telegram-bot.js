@@ -323,6 +323,15 @@ bot.on('polling_error', (error) => {
   }
 });
 
+// Обработка успешного подключения
+bot.on('polling_start', () => {
+  console.log('✅ Bot polling started successfully');
+});
+
+bot.on('polling_stop', () => {
+  console.log('🛑 Bot polling stopped');
+});
+
 // Функция для принудительной остановки всех экземпляров бота
 const forceStopBot = async () => {
   try {
@@ -331,11 +340,19 @@ const forceStopBot = async () => {
     // Останавливаем polling если он запущен
     if (bot && typeof bot.stopPolling === 'function') {
       bot.stopPolling();
+      console.log('✅ Bot polling stopped');
     }
     
     // Останавливаем webhook если он запущен
     if (bot && typeof bot.stopWebhook === 'function') {
       bot.stopWebhook();
+      console.log('✅ Bot webhook stopped');
+    }
+    
+    // Для node-telegram-bot-api также можно использовать close()
+    if (bot && typeof bot.close === 'function') {
+      bot.close();
+      console.log('✅ Bot connection closed');
     }
     
     console.log('✅ Bot force stopped');
@@ -376,12 +393,15 @@ const startBot = async () => {
       throw new Error('Telegram bot token is not configured');
     }
     
-    // Запускаем polling с обработкой ошибок
+    // Запускаем polling с обработкой ошибок (для node-telegram-bot-api)
     try {
-      await bot.launch();
+      // Для node-telegram-bot-api polling запускается автоматически при создании
+      // Проверяем, что бот работает
+      const me = await bot.getMe();
       console.log('✅ Bot polling started successfully');
+      console.log(`🤖 Bot info: @${me.username} (${me.first_name})`);
     } catch (launchError) {
-      console.error('❌ Error launching bot:', launchError);
+      console.error('❌ Error starting bot polling:', launchError);
       throw launchError;
     }
     
