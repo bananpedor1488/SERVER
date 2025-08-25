@@ -29,6 +29,11 @@ const UserSchema = new mongoose.Schema({
   emailVerificationCode: { type: String }, // Код подтверждения
   emailVerificationExpires: { type: Date }, // Время истечения кода
   
+  // Верификация телефона
+  phoneNumber: { type: String }, // Номер телефона
+  phoneVerified: { type: Boolean, default: false }, // Статус верификации телефона
+  phoneVerifiedAt: { type: Date }, // Дата верификации телефона
+  
   // Отслеживание входа и сессий
   lastLogin: { type: Date }, // Последний вход
   lastLoginIP: { type: String }, // IP адрес последнего входа

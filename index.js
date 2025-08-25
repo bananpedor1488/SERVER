@@ -13,6 +13,9 @@ const server = createServer(app);
 // Подключаем хуки для репостов
 const { initializeRepostHooks } = require('./utils/repostHooks');
 
+// Подключаем Telegram бота
+const { startBot } = require('./telegram-bot');
+
 // Socket.IO настройки с поддержкой JWT
 const io = new Server(server, {
   cors: {
@@ -382,6 +385,7 @@ const followRoutes = require('./routes/follow');
 const messageRoutes = require('./routes/messages'); // Добавляем роуты для чата
 const callRoutes = require('./routes/calls'); // Добавляем роуты для звонков
 const pointsRoutes = require('./routes/points'); // Добавляем роуты для баллов
+const phoneVerificationRoutes = require('./routes/phoneVerification'); // Добавляем роуты для верификации телефона
 
 // Middleware для преобразования JWT в req.session.user для совместимости со старым кодом
 const jwtToSession = (req, res, next) => {
@@ -397,6 +401,7 @@ app.use('/api/follow', authenticateToken, jwtToSession, followRoutes);
 app.use('/api/messages', authenticateToken, jwtToSession, messageRoutes); // Добавляем роуты сообщений
 app.use('/api/calls', authenticateToken, jwtToSession, callRoutes); // Добавляем роуты звонков
 app.use('/api/points', authenticateToken, jwtToSession, pointsRoutes); // Добавляем роуты баллов
+app.use('/api/phone-verification', authenticateToken, jwtToSession, phoneVerificationRoutes); // Добавляем роуты верификации телефона
 
 // Роут для проверки текущего пользователя с JWT
 app.get('/api/me', authenticateToken, async (req, res) => {
@@ -574,12 +579,20 @@ app.use('*', (req, res) => {
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
-}).then(() => {
+}).then(async () => {
   console.log('✅ MongoDB connected successfully');
   
   // Инициализируем хуки для репостов после подключения к БД
   initializeRepostHooks();
   console.log('✅ Repost hooks initialized');
+  
+  // Запускаем Telegram бота после подключения к БД
+  try {
+    await startBot();
+    console.log('✅ Telegram bot started successfully');
+  } catch (error) {
+    console.error('❌ Failed to start Telegram bot:', error);
+  }
   
 }).catch(err => {
   console.error('❌ MongoDB connection error:', err);
@@ -600,7 +613,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Auth: JWT Bearer Token`);
   console.log(`⚡ Real-time: Socket.IO enabled`);
-  console.log(`🔄 Features: Reposts, Comments, Likes, Follows, Chats, Voice/Video Calls`);
+  console.log(`🔄 Features: Reposts, Comments, Likes, Follows, Chats, Voice/Video Calls, Phone Verification`);
   console.log('🔧 Key endpoints:');
   console.log('   - POST /api/auth/login');
   console.log('   - POST /api/auth/register');
@@ -609,7 +622,10 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('   - GET  /api/test-auth (with Bearer token)');
   console.log('   - POST /api/posts/:id/repost (NEW!)');
   console.log('   - GET  /api/messages/chats (NEW!)');
+  console.log('   - GET  /api/phone-verification/status (NEW!)');
+  console.log('   - POST /api/phone-verification/verify (NEW!)');
   console.log('   - Socket.IO: Real-time posts, reposts, likes, comments, chats, WebRTC calls');
+  console.log('   - Telegram Bot: Phone verification (NEW!)');
 });
 
 module.exports = app;
