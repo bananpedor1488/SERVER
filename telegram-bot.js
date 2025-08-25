@@ -286,6 +286,17 @@ setInterval(() => {
 bot.on('error', (error) => {
   console.error('❌ Telegram bot error:', error);
   
+  // Обработка rate limiting (429)
+  if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 429) {
+    const retryAfter = error.response.headers['retry-after'] || 60;
+    console.log(`⏳ Rate limit exceeded. Waiting ${retryAfter} seconds before retry...`);
+    
+    setTimeout(() => {
+      console.log('🔄 Retrying after rate limit...');
+    }, retryAfter * 1000);
+    return;
+  }
+  
   // Если ошибка связана с конфликтом, попробуем перезапустить бота
   if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
     console.log('🔄 Detected bot conflict, attempting to restart...');
@@ -305,6 +316,17 @@ bot.on('error', (error) => {
 
 bot.on('polling_error', (error) => {
   console.error('❌ Telegram bot polling error:', error);
+  
+  // Обработка rate limiting (429)
+  if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 429) {
+    const retryAfter = error.response.headers['retry-after'] || 60;
+    console.log(`⏳ Rate limit exceeded. Waiting ${retryAfter} seconds before retry...`);
+    
+    setTimeout(() => {
+      console.log('🔄 Retrying polling after rate limit...');
+    }, retryAfter * 1000);
+    return;
+  }
   
   // Если ошибка связана с конфликтом, попробуем перезапустить бота
   if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
@@ -339,20 +361,35 @@ const forceStopBot = async () => {
     
     // Останавливаем polling если он запущен
     if (bot && typeof bot.stopPolling === 'function') {
-      bot.stopPolling();
-      console.log('✅ Bot polling stopped');
+      try {
+        bot.stopPolling();
+        console.log('✅ Bot polling stopped');
+      } catch (pollingError) {
+        console.log('⚠️ Error stopping polling (might already be stopped):', pollingError.message);
+      }
     }
     
     // Останавливаем webhook если он запущен
     if (bot && typeof bot.stopWebhook === 'function') {
-      bot.stopWebhook();
-      console.log('✅ Bot webhook stopped');
+      try {
+        bot.stopWebhook();
+        console.log('✅ Bot webhook stopped');
+      } catch (webhookError) {
+        console.log('⚠️ Error stopping webhook (might already be stopped):', webhookError.message);
+      }
     }
     
     // Для node-telegram-bot-api также можно использовать close()
+    // Но будем осторожны с этим методом из-за rate limiting
     if (bot && typeof bot.close === 'function') {
-      bot.close();
-      console.log('✅ Bot connection closed');
+      try {
+        // Добавляем небольшую задержку перед закрытием
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        bot.close();
+        console.log('✅ Bot connection closed');
+      } catch (closeError) {
+        console.log('⚠️ Error closing bot connection (might already be closed):', closeError.message);
+      }
     }
     
     console.log('✅ Bot force stopped');
@@ -365,12 +402,6 @@ const forceStopBot = async () => {
 const startBot = async () => {
   try {
     console.log('🤖 Starting Telegram bot...');
-    
-    // Сначала принудительно останавливаем все экземпляры
-    await forceStopBot();
-    
-    // Ждем немного перед запуском нового экземпляра
-    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Проверяем подключение к БД
     const isConnected = await checkDBConnection();
@@ -393,16 +424,32 @@ const startBot = async () => {
       throw new Error('Telegram bot token is not configured');
     }
     
-    // Запускаем polling с обработкой ошибок (для node-telegram-bot-api)
+    // Проверяем, что бот работает (без принудительной остановки)
     try {
-      // Для node-telegram-bot-api polling запускается автоматически при создании
-      // Проверяем, что бот работает
       const me = await bot.getMe();
       console.log('✅ Bot polling started successfully');
       console.log(`🤖 Bot info: @${me.username} (${me.first_name})`);
     } catch (launchError) {
-      console.error('❌ Error starting bot polling:', launchError);
-      throw launchError;
+      console.error('❌ Error checking bot status:', launchError);
+      
+      // Если это rate limiting, ждем и пробуем снова
+      if (launchError.code === 'ETELEGRAM' && launchError.response && launchError.response.statusCode === 429) {
+        const retryAfter = launchError.response.headers['retry-after'] || 60;
+        console.log(`⏳ Rate limit exceeded. Waiting ${retryAfter} seconds before retry...`);
+        
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        
+        try {
+          const me = await bot.getMe();
+          console.log('✅ Bot polling started successfully after rate limit wait');
+          console.log(`🤖 Bot info: @${me.username} (${me.first_name})`);
+        } catch (retryError) {
+          console.error('❌ Error after rate limit retry:', retryError);
+          throw retryError;
+        }
+      } else {
+        throw launchError;
+      }
     }
     
     console.log('🤖 Telegram bot started successfully');
@@ -456,7 +503,10 @@ process.on('SIGINT', async () => {
   } catch (error) {
     console.error('❌ Error during graceful shutdown:', error);
   }
-  process.exit(0);
+  // Даем время на завершение операций
+  setTimeout(() => {
+    process.exit(0);
+  }, 2000);
 });
 
 process.on('SIGTERM', async () => {
@@ -467,7 +517,10 @@ process.on('SIGTERM', async () => {
   } catch (error) {
     console.error('❌ Error during graceful shutdown:', error);
   }
-  process.exit(0);
+  // Даем время на завершение операций
+  setTimeout(() => {
+    process.exit(0);
+  }, 2000);
 });
 
 // Обработка необработанных ошибок

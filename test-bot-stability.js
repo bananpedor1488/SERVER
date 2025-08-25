@@ -59,35 +59,44 @@ async function testBotStability() {
       console.error('❌ Ошибка при подключении к API:', error.message);
     }
     
-    // Тест 4: Проверка запуска и остановки polling
-    console.log('\n4. Тестирование запуска и остановки polling...');
-    
-    try {
-      console.log('🚀 Запуск polling...');
-      bot.startPolling();
-      console.log('✅ Polling запущен успешно');
-      
-      // Ждем немного
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      console.log('🛑 Остановка polling...');
-      bot.stopPolling();
-      console.log('✅ Polling остановлен успешно');
-      
-    } catch (error) {
-      console.error('❌ Ошибка при запуске/остановке polling:', error.message);
-    }
+         // Тест 4: Проверка запуска и остановки polling
+     console.log('\n4. Тестирование запуска и остановки polling...');
+     
+     try {
+       console.log('🚀 Запуск polling...');
+       bot.startPolling();
+       console.log('✅ Polling запущен успешно');
+       
+       // Ждем немного
+       await new Promise(resolve => setTimeout(resolve, 3000));
+       
+       console.log('🛑 Остановка polling...');
+       try {
+         bot.stopPolling();
+         console.log('✅ Polling остановлен успешно');
+       } catch (stopError) {
+         console.log('⚠️ Ошибка при остановке polling (может быть уже остановлен):', stopError.message);
+       }
+       
+     } catch (error) {
+       console.error('❌ Ошибка при запуске/остановке polling:', error.message);
+     }
     
     console.log('\n🎉 Тестирование завершено!');
     
   } catch (error) {
     console.error('❌ Ошибка при тестировании:', error.message);
-  } finally {
-    // Закрываем соединение
-    if (bot && typeof bot.close === 'function') {
-      bot.close();
-    }
-  }
+     } finally {
+     // Закрываем соединение
+     if (bot && typeof bot.close === 'function') {
+       try {
+         bot.close();
+         console.log('✅ Bot connection closed in test');
+       } catch (closeError) {
+         console.log('⚠️ Error closing bot connection in test:', closeError.message);
+       }
+     }
+   }
 }
 
 testBotStability();
