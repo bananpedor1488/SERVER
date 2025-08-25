@@ -589,9 +589,10 @@ mongoose.connect(process.env.MONGO_URI, {
   // Запускаем Telegram бота после подключения к БД
   try {
     await startBot();
-    console.log('✅ Telegram bot started successfully');
+    console.log('✅ Telegram bot initialization completed');
   } catch (error) {
     console.error('❌ Failed to start Telegram bot:', error);
+    console.log('⚠️ Server will continue running without Telegram bot');
   }
   
 }).catch(err => {
@@ -601,9 +602,60 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('Shutting down gracefully...');
-  await mongoose.connection.close();
+  console.log('🛑 Received SIGINT, shutting down gracefully...');
+  try {
+    // Останавливаем Telegram бота
+    const { forceStopBot } = require('./telegram-bot');
+    await forceStopBot();
+    console.log('✅ Telegram bot stopped');
+    
+    // Закрываем подключение к MongoDB
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+    
+    console.log('✅ Server shutdown completed');
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+  }
   process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  try {
+    // Останавливаем Telegram бота
+    const { forceStopBot } = require('./telegram-bot');
+    await forceStopBot();
+    console.log('✅ Telegram bot stopped');
+    
+    // Закрываем подключение к MongoDB
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+    
+    console.log('✅ Server shutdown completed');
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+  }
+  process.exit(0);
+});
+
+// Обработка необработанных ошибок
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack trace:', error.stack);
+  // Не завершаем процесс сразу, даем время на логирование
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Не завершаем процесс сразу, даем время на логирование
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
 });
 
 // Запуск сервера с Socket.IO0

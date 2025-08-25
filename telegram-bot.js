@@ -327,8 +327,17 @@ bot.on('polling_error', (error) => {
 const forceStopBot = async () => {
   try {
     console.log('🛑 Force stopping bot...');
-    bot.stopPolling();
-    bot.stop();
+    
+    // Останавливаем polling если он запущен
+    if (bot && typeof bot.stopPolling === 'function') {
+      bot.stopPolling();
+    }
+    
+    // Останавливаем webhook если он запущен
+    if (bot && typeof bot.stopWebhook === 'function') {
+      bot.stopWebhook();
+    }
+    
     console.log('✅ Bot force stopped');
   } catch (error) {
     console.error('❌ Error force stopping bot:', error);
@@ -338,6 +347,8 @@ const forceStopBot = async () => {
 // Запуск бота
 const startBot = async () => {
   try {
+    console.log('🤖 Starting Telegram bot...');
+    
     // Сначала принудительно останавливаем все экземпляры
     await forceStopBot();
     
@@ -360,12 +371,28 @@ const startBot = async () => {
       }
     }
     
+    // Проверяем, что токен бота существует
+    if (!token) {
+      throw new Error('Telegram bot token is not configured');
+    }
+    
+    // Запускаем polling с обработкой ошибок
+    try {
+      await bot.launch();
+      console.log('✅ Bot polling started successfully');
+    } catch (launchError) {
+      console.error('❌ Error launching bot:', launchError);
+      throw launchError;
+    }
+    
     console.log('🤖 Telegram bot started successfully');
-    console.log('📱 Bot token:', token);
+    console.log('📱 Bot token:', token ? `${token.substring(0, 10)}...` : 'NOT SET');
     console.log('🔗 Users can start the bot with /start');
+    
   } catch (error) {
     console.error('❌ Error starting Telegram bot:', error);
-    throw error;
+    // Не выбрасываем ошибку, чтобы сервер продолжал работать
+    console.log('⚠️ Telegram bot failed to start, but server continues running');
   }
 };
 
@@ -402,15 +429,42 @@ module.exports = {
 
 // Обработка закрытия процесса
 process.on('SIGINT', async () => {
-  console.log('🛑 Received SIGINT, stopping bot...');
-  await forceStopBot();
+  console.log('🛑 Received SIGINT, stopping bot gracefully...');
+  try {
+    await forceStopBot();
+    console.log('✅ Bot stopped gracefully');
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+  }
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, stopping bot...');
-  await forceStopBot();
+  console.log('🛑 Received SIGTERM, stopping bot gracefully...');
+  try {
+    await forceStopBot();
+    console.log('✅ Bot stopped gracefully');
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+  }
   process.exit(0);
+});
+
+// Обработка необработанных ошибок
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  // Не завершаем процесс сразу, даем время на логирование
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Не завершаем процесс сразу, даем время на логирование
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
 });
 
 // Бот теперь запускается из основного сервера
