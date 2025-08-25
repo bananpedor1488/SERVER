@@ -6,6 +6,16 @@ const { verifyCode, getVerificationStatus, linkUserToChat, autoVerifyPhoneNumber
 // Получить статус верификации телефона
 router.get('/status', async (req, res) => {
   try {
+    // Проверяем, что пользователь аутентифицирован
+    if (!req.user || !req.user.id) {
+      console.error('❌ User not authenticated in /status');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Пользователь не аутентифицирован' 
+      });
+    }
+    
+    console.log('🔍 Checking verification status for user:', req.user.id);
     const status = await getVerificationStatus(req.user.id);
     
     if (!status.success) {
@@ -78,6 +88,16 @@ router.post('/verify', async (req, res) => {
 // Получить инструкции для верификации
 router.get('/instructions', async (req, res) => {
   try {
+    // Проверяем, что пользователь аутентифицирован
+    if (!req.user || !req.user.id) {
+      console.error('❌ User not authenticated in /instructions');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Пользователь не аутентифицирован' 
+      });
+    }
+    
+    console.log('📋 Getting instructions for user:', req.user.id);
     const status = await getVerificationStatus(req.user.id);
     
     if (status.success && status.phoneVerified) {
@@ -134,7 +154,17 @@ router.get('/instructions', async (req, res) => {
 // Инициация автоматической верификации
 router.post('/start-auto-verification', async (req, res) => {
   try {
+    // Проверяем, что пользователь аутентифицирован
+    if (!req.user || !req.user.id) {
+      console.error('❌ User not authenticated in /start-auto-verification');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Пользователь не аутентифицирован' 
+      });
+    }
+    
     const userId = req.user.id;
+    console.log('🚀 Starting auto-verification for user:', userId);
     
     // Генерируем уникальный chatId для пользователя
     const chatId = `user_${userId}_${Date.now()}`;
