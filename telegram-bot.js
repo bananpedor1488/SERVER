@@ -285,15 +285,65 @@ setInterval(() => {
 // Обработка ошибок
 bot.on('error', (error) => {
   console.error('❌ Telegram bot error:', error);
+  
+  // Если ошибка связана с конфликтом, попробуем перезапустить бота
+  if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
+    console.log('🔄 Detected bot conflict, attempting to restart...');
+    setTimeout(() => {
+      try {
+        bot.stopPolling();
+        setTimeout(() => {
+          bot.startPolling();
+          console.log('✅ Bot restarted successfully');
+        }, 2000);
+      } catch (restartError) {
+        console.error('❌ Failed to restart bot:', restartError);
+      }
+    }, 1000);
+  }
 });
 
 bot.on('polling_error', (error) => {
   console.error('❌ Telegram bot polling error:', error);
+  
+  // Если ошибка связана с конфликтом, попробуем перезапустить бота
+  if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
+    console.log('🔄 Detected polling conflict, attempting to restart...');
+    setTimeout(() => {
+      try {
+        bot.stopPolling();
+        setTimeout(() => {
+          bot.startPolling();
+          console.log('✅ Bot polling restarted successfully');
+        }, 2000);
+      } catch (restartError) {
+        console.error('❌ Failed to restart bot polling:', restartError);
+      }
+    }, 1000);
+  }
 });
+
+// Функция для принудительной остановки всех экземпляров бота
+const forceStopBot = async () => {
+  try {
+    console.log('🛑 Force stopping bot...');
+    bot.stopPolling();
+    bot.stop();
+    console.log('✅ Bot force stopped');
+  } catch (error) {
+    console.error('❌ Error force stopping bot:', error);
+  }
+};
 
 // Запуск бота
 const startBot = async () => {
   try {
+    // Сначала принудительно останавливаем все экземпляры
+    await forceStopBot();
+    
+    // Ждем немного перед запуском нового экземпляра
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     // Проверяем подключение к БД
     const isConnected = await checkDBConnection();
     if (!isConnected) {
@@ -346,8 +396,22 @@ module.exports = {
   getVerificationStatus,
   startBot,
   linkUserToChat,
-  autoVerifyPhoneNumber
+  autoVerifyPhoneNumber,
+  forceStopBot
 };
+
+// Обработка закрытия процесса
+process.on('SIGINT', async () => {
+  console.log('🛑 Received SIGINT, stopping bot...');
+  await forceStopBot();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, stopping bot...');
+  await forceStopBot();
+  process.exit(0);
+});
 
 // Бот теперь запускается из основного сервера
 // Убираем автономный запуск
