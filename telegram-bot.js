@@ -241,18 +241,41 @@ const getVerificationStatus = async (userId) => {
 // Функция для автоматической верификации номера телефона
 const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
   try {
-    // Находим пользователя по chatId (если он был сохранен)
-    // Или верифицируем номер для всех пользователей с этим номером
-    const users = await User.find({ 
-      phoneNumber: phoneNumber,
+    console.log(`🔍 Looking for users with phone number: ${phoneNumber} and chatId: ${chatId}`);
+    
+    // Сначала ищем пользователя по chatId (если он был сохранен)
+    let users = await User.find({ 
+      telegramChatId: chatId,
       phoneVerified: false 
     });
     
+    console.log(`📱 Found ${users.length} users with chatId ${chatId}`);
+    
+    // Если не нашли по chatId, ищем по номеру телефона
+    if (users.length === 0) {
+      users = await User.find({ 
+        phoneNumber: phoneNumber,
+        phoneVerified: false 
+      });
+      console.log(`📱 Found ${users.length} users with phone number ${phoneNumber}`);
+    }
+    
+    // Если все еще не нашли, ищем пользователей без номера телефона (для новых пользователей)
+    if (users.length === 0) {
+      users = await User.find({ 
+        phoneNumber: { $exists: false },
+        phoneVerified: false 
+      });
+      console.log(`📱 Found ${users.length} users without phone number`);
+    }
+    
     if (users.length > 0) {
-      // Верифицируем всех пользователей с этим номером
+      // Верифицируем всех найденных пользователей
       for (const user of users) {
+        user.phoneNumber = phoneNumber;
         user.phoneVerified = true;
         user.phoneVerifiedAt = new Date();
+        user.telegramChatId = chatId; // Сохраняем chatId для будущих верификаций
         await user.save();
         
         console.log(`✅ Auto-verified phone for user ${user.username} (${user._id}): ${phoneNumber}`);
@@ -260,6 +283,20 @@ const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
     } else {
       // Если пользователь не найден, сохраняем информацию для последующей верификации
       console.log(`📝 Phone number ${phoneNumber} ready for verification (chatId: ${chatId})`);
+      
+      // Создаем временную запись для последующей верификации
+      const tempUser = new User({
+        phoneNumber: phoneNumber,
+        phoneVerified: true,
+        phoneVerifiedAt: new Date(),
+        telegramChatId: chatId,
+        username: `temp_${chatId}`,
+        email: `temp_${chatId}@temp.com`,
+        emailVerified: true // Временно верифицируем email для temp пользователя
+      });
+      
+      await tempUser.save();
+      console.log(`📝 Created temporary user for phone ${phoneNumber} (chatId: ${chatId})`);
     }
     
     return { success: true, message: 'Номер телефона автоматически верифицирован' };
