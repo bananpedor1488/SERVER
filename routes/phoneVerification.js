@@ -1,11 +1,10 @@
 // Маршруты для верификации номера телефона
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
 const { verifyCode, getVerificationStatus } = require('../telegram-bot');
 
 // Получить статус верификации телефона
-router.get('/status', auth, async (req, res) => {
+router.get('/status', async (req, res) => {
   try {
     const status = await getVerificationStatus(req.user.id);
     
@@ -33,7 +32,7 @@ router.get('/status', auth, async (req, res) => {
 });
 
 // Верифицировать номер телефона по коду
-router.post('/verify', auth, async (req, res) => {
+router.post('/verify', async (req, res) => {
   try {
     const { code } = req.body;
     
@@ -77,7 +76,7 @@ router.post('/verify', auth, async (req, res) => {
 });
 
 // Получить инструкции для верификации
-router.get('/instructions', auth, async (req, res) => {
+router.get('/instructions', async (req, res) => {
   try {
     const status = await getVerificationStatus(req.user.id);
     
@@ -100,11 +99,11 @@ router.get('/instructions', auth, async (req, res) => {
           title: 'Откройте Telegram',
           description: 'Перейдите в приложение Telegram на вашем устройстве'
         },
-        {
-          step: 2,
-          title: 'Найдите нашего бота',
-          description: 'Найдите бота @SocialSpaceVerificationBot или перейдите по ссылке'
-        },
+                 {
+           step: 2,
+           title: 'Найдите нашего бота',
+           description: 'Найдите бота @SocialSpaceWEB_bot или перейдите по ссылке'
+         },
         {
           step: 3,
           title: 'Отправьте контакт',
