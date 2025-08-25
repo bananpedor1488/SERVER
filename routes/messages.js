@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { sendMessageNotification } = require('../utils/notificationUtils');
 const router = express.Router();
 
 // Middleware проверки авторизации
@@ -319,6 +320,20 @@ router.post('/chats/:chatId/messages', isAuth, async (req, res) => {
       editedAt: populatedMessage.editedAt,
       isRead: false
     };
+
+    // Отправляем email-уведомления о новом сообщении
+    try {
+      const sender = await User.findById(userId);
+      
+      for (const participant of otherParticipants) {
+        const recipient = await User.findById(participant._id);
+        if (sender && recipient) {
+          await sendMessageNotification(sender, recipient, formattedMessage);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending message notification:', error);
+    }
 
     // Отправляем real-time уведомления
     const io = req.app.get('io');

@@ -1,5 +1,6 @@
 const express = require('express');
 const User = require('../models/User');
+const { sendFollowNotification } = require('../utils/notificationUtils');
 const router = express.Router();
 
 const isAuth = (req, res, next) => {
@@ -28,6 +29,13 @@ router.post('/:id', isAuth, async (req, res) => {
     } else {
       user.following.push(targetId);
       target.followers.push(userId);
+      
+      // Отправляем email-уведомление о новой подписке
+      try {
+        await sendFollowNotification(user, target);
+      } catch (error) {
+        console.error('Error sending follow notification:', error);
+      }
     }
 
     await user.save();

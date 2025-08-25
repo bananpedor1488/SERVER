@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Points = require('../models/Points');
 const User = require('../models/User');
+const { sendTransferNotification } = require('../utils/notificationUtils');
 
 // Генерация уникального кода транзакции
 const generateTransactionCode = () => {
@@ -140,6 +141,13 @@ router.post('/transfer', async (req, res) => {
     await transaction.save();
     await sender.save();
     await recipient.save();
+
+    // Отправляем email-уведомление о переводе
+    try {
+      await sendTransferNotification(sender, recipient, netAmount, description);
+    } catch (error) {
+      console.error('Error sending transfer notification:', error);
+    }
 
     // Получить обновленные данные для ответа
     const populatedTransaction = await Points.findById(transaction._id)

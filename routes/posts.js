@@ -2,6 +2,8 @@ const express = require('express');
 const Post = require('../models/Post');
 const Repost = require('../models/Repost');
 const Comment = require('../models/Comment');
+const User = require('../models/User');
+const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
 const router = express.Router();
 
 // Middleware проверки сессии
@@ -219,6 +221,18 @@ router.post('/:id/repost', isAuth, async (req, res) => {
       createdAt: populatedRepost.createdAt
     };
 
+    // Отправляем email-уведомление о репосте
+    try {
+      const reposter = await User.findById(userId);
+      const originalAuthor = await User.findById(originalPost.author._id);
+      
+      if (reposter && originalAuthor) {
+        await sendRepostNotification(reposter, originalAuthor, originalPost);
+      }
+    } catch (error) {
+      console.error('Error sending repost notification:', error);
+    }
+
     // Отправляем real-time обновление всем подключенным пользователям
     const io = req.app.get('io');
     io.to('posts').emit('newRepost', repostData);
@@ -278,6 +292,18 @@ router.post('/:id/comment', isAuth, async (req, res) => {
 
     const populated = await comment.populate('author', 'username displayName avatar premium');
 
+    // Отправляем email-уведомление о новом комментарии
+    try {
+      const commenter = await User.findById(req.session.user.id);
+      const postAuthor = await User.findById(post.author);
+      
+      if (commenter && postAuthor && postAuthor._id.toString() !== req.session.user.id) {
+        await sendCommentNotification(commenter, postAuthor, post, populated);
+      }
+    } catch (error) {
+      console.error('Error sending comment notification:', error);
+    }
+
     // Отправляем real-time обновление всем подключенным пользователям
     const io = req.app.get('io');
     io.to('posts').emit('newComment', {
@@ -317,6 +343,18 @@ router.post('/:id/like', isAuth, async (req, res) => {
 
     if (index === -1) {
       post.likes.push(userId);
+      
+      // Отправляем email-уведомление о новом лайке
+      try {
+        const liker = await User.findById(userId);
+        const postAuthor = await User.findById(post.author);
+        
+        if (liker && postAuthor && postAuthor._id.toString() !== userId) {
+          await sendLikeNotification(liker, postAuthor, post);
+        }
+      } catch (error) {
+        console.error('Error sending like notification:', error);
+      }
     } else {
       post.likes.splice(index, 1);
     }

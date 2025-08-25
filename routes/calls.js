@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Call = require('../models/Call');
 const Chat = require('../models/Chat');
 const User = require('../models/User');
+const { sendMissedCallNotification } = require('../utils/notificationUtils');
 const router = express.Router();
 
 // Middleware проверки авторизации
@@ -193,6 +194,13 @@ router.post('/decline/:callId', isAuth, async (req, res) => {
     call.status = 'declined';
     call.endedAt = new Date();
     await call.save();
+
+    // Отправляем email-уведомление о пропущенном звонке
+    try {
+      await sendMissedCallNotification(call.caller, call.callee);
+    } catch (error) {
+      console.error('Error sending missed call notification:', error);
+    }
 
     // Уведомляем вызывающего
     const io = req.app.get('io');
