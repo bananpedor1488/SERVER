@@ -16,14 +16,16 @@ const testUser1 = {
   _id: 'test-user-1',
   username: 'testuser1',
   email: 'test1@example.com',
-  displayName: 'Test User 1'
+  displayName: 'Test User 1',
+  avatar: 'https://via.placeholder.com/200x200/667eea/ffffff?text=T1'
 };
 
 const testUser2 = {
   _id: 'test-user-2',
   username: 'testuser2',
   email: 'test2@example.com',
-  displayName: 'Test User 2'
+  displayName: 'Test User 2',
+  avatar: 'https://via.placeholder.com/200x200/764ba2/ffffff?text=T2'
 };
 
 const testPost = {
