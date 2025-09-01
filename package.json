@@ -10,10 +10,18 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "postinstall": "npm install nodemailer@6.9.7"
   },
-  "keywords": ["social", "backend", "express", "mongodb", "socket.io", "real-time"],
+  "keywords": [
+    "social",
+    "backend",
+    "express",
+    "mongodb",
+    "socket.io",
+    "real-time"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@octokit/rest": "^20.1.2",
     "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",

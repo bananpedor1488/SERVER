@@ -5,6 +5,7 @@ const Comment = require('../models/Comment');
 const User = require('../models/User');
 const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
 const { uploadFiles, handleUploadError } = require('../middleware/upload');
+const { uploadFileToGitHub, ensureRepositoryExists } = require('../utils/githubUpload');
 const router = express.Router();
 
 // Middleware проверки сессии
@@ -145,22 +146,43 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       return res.status(400).json({ message: 'Content or files required' });
     }
 
+    // Убеждаемся что репозиторий существует
+    await ensureRepositoryExists();
+
     // Обрабатываем загруженные файлы
     const files = [];
     if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        const base64Data = file.buffer.toString('base64');
-        const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
-        
-        files.push({
-          filename: file.originalname,
-          originalName: file.originalname,
-          mimetype: file.mimetype,
-          size: file.size,
-          data: dataUrl,
-          url: dataUrl // Используем data URL для совместимости
-        });
-      });
+      console.log(`Загружаем ${req.files.length} файлов на GitHub...`);
+      
+      for (const file of req.files) {
+        try {
+          // Загружаем файл на GitHub
+          const githubResult = await uploadFileToGitHub(
+            file.buffer, 
+            file.originalname, 
+            file.mimetype
+          );
+          
+          files.push({
+            filename: file.originalname,
+            originalName: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+            url: githubResult.url,           // GitHub raw URL
+            githubUrl: githubResult.githubUrl, // GitHub web URL
+            githubPath: githubResult.path,   // Путь в репозитории
+            githubSha: githubResult.sha      // SHA хеш
+          });
+          
+          console.log(`Файл ${file.originalname} успешно загружен на GitHub`);
+        } catch (uploadError) {
+          console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
+          // Продолжаем с другими файлами, но логируем ошибку
+          return res.status(500).json({ 
+            message: `Ошибка загрузки файла ${file.originalname}: ${uploadError.message}` 
+          });
+        }
+      }
     }
 
     const post = await Post.create({
