@@ -5,7 +5,7 @@ const Comment = require('../models/Comment');
 const User = require('../models/User');
 const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
 const { uploadFiles, handleUploadError } = require('../middleware/upload');
-const { uploadFileToGitHub, ensureRepositoryExists } = require('../utils/githubUpload');
+const { uploadFileToGitLab, checkProjectExists } = require('../utils/gitlabUpload');
 const router = express.Router();
 
 // Middleware проверки сессии
@@ -146,8 +146,8 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       return res.status(400).json({ message: 'Content or files required' });
     }
 
-    // Убеждаемся что репозиторий существует
-    await ensureRepositoryExists();
+    // Убеждаемся что проект GitLab существует
+    await checkProjectExists();
 
     // Обрабатываем загруженные файлы
     const files = [];
@@ -156,8 +156,8 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       
       for (const file of req.files) {
         try {
-          // Загружаем файл на GitHub
-          const githubResult = await uploadFileToGitHub(
+          // Загружаем файл на GitLab
+          const gitlabResult = await uploadFileToGitLab(
             file.buffer, 
             file.originalname, 
             file.mimetype
@@ -168,13 +168,13 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
             originalName: file.originalname,
             mimetype: file.mimetype,
             size: file.size,
-            url: githubResult.url,           // GitHub raw URL
-            githubUrl: githubResult.githubUrl, // GitHub web URL
-            githubPath: githubResult.path,   // Путь в репозитории
-            githubSha: githubResult.sha      // SHA хеш
+            url: gitlabResult.url,           // GitLab raw URL
+            gitlabUrl: gitlabResult.gitlabUrl, // GitLab web URL
+            gitlabPath: gitlabResult.path,   // Путь в репозитории
+            fileName: gitlabResult.fileName   // Имя файла
           });
           
-          console.log(`Файл ${file.originalname} успешно загружен на GitHub`);
+          console.log(`Файл ${file.originalname} успешно загружен на GitLab`);
         } catch (uploadError) {
           console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
           // Продолжаем с другими файлами, но логируем ошибку

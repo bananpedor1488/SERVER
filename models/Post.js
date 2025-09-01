@@ -16,10 +16,10 @@ const postSchema = new mongoose.Schema({
     originalName: String,
     mimetype: String,
     size: Number,
-    url: String,        // GitHub URL для скачивания файла
-    githubUrl: String,  // URL на GitHub (веб-интерфейс)
-    githubPath: String, // Путь к файлу в репозитории
-    githubSha: String   // SHA хеш файла на GitHub
+    url: String,        // GitLab URL для скачивания файла
+    gitlabUrl: String,  // URL на GitLab (веб-интерфейс)
+    gitlabPath: String, // Путь к файлу в репозитории
+    fileName: String    // Имя файла в GitLab
   }],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
