@@ -1,7 +1,7 @@
 const { Octokit } = require('@octokit/rest');
 
 // Конфигурация GitHub
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = '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';
 const GITHUB_OWNER = 'bananpedor1488';
 const GITHUB_REPO = 'files'; // Репозиторий для хранения файлов
 
