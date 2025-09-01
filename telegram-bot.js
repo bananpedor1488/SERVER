@@ -1,5 +1,4 @@
 // Telegram бот для верификации номеров телефонов
-console.log('🤖 Loading telegram-bot.js...');
 
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
@@ -18,14 +17,12 @@ const userStates = new Map();
 const checkDBConnection = async () => {
   try {
     if (mongoose.connection.readyState === 1) {
-      console.log('✅ MongoDB already connected for Telegram bot');
       return true;
     } else {
-      console.log('⚠️ MongoDB not connected, waiting for main server connection...');
       return false;
     }
   } catch (error) {
-    console.error('❌ MongoDB connection check error:', error);
+    console.error('MongoDB connection check error:', error);
     return false;
   }
 };
@@ -34,8 +31,6 @@ const checkDBConnection = async () => {
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const username = msg.from.username || msg.from.first_name;
-  
-  console.log(`👤 User ${username} (${chatId}) started bot`);
   
   const welcomeMessage = `
 🤖 **Добро пожаловать в SocialSpace!**
@@ -73,8 +68,6 @@ bot.on('contact', async (msg) => {
   const chatId = msg.chat.id;
   const contact = msg.contact;
   const username = msg.from.username || msg.from.first_name;
-  
-  console.log(`📱 Contact received from ${username} (${chatId}): ${contact.phone_number}`);
   
   try {
     // Проверяем, что контакт принадлежит пользователю
@@ -124,13 +117,11 @@ bot.on('contact', async (msg) => {
       }
     });
     
-    console.log(`✅ Auto-verification completed for ${phoneNumber} (chatId: ${chatId})`);
-    
     // Автоматически верифицируем номер для всех пользователей с этим chatId
     await autoVerifyPhoneNumber(chatId, phoneNumber);
     
   } catch (error) {
-    console.error('❌ Error processing contact:', error);
+    console.error('Error processing contact:', error);
     bot.sendMessage(chatId, '❌ Произошла ошибка при обработке контакта. Попробуйте позже.');
   }
 });
@@ -204,8 +195,6 @@ const verifyCode = async (code, userId) => {
     
     bot.sendMessage(parseInt(code), successMessage, { parse_mode: 'Markdown' });
     
-    console.log(`✅ Phone verification completed for user ${userId}: ${userState.phoneNumber}`);
-    
     return { 
       success: true, 
       message: 'Номер телефона успешно верифицирован',
@@ -213,7 +202,7 @@ const verifyCode = async (code, userId) => {
     };
     
   } catch (error) {
-    console.error('❌ Error verifying code:', error);
+    console.error('Error verifying code:', error);
     return { success: false, message: 'Ошибка при верификации кода' };
   }
 };
@@ -233,7 +222,7 @@ const getVerificationStatus = async (userId) => {
       phoneVerifiedAt: user.phoneVerifiedAt || null
     };
   } catch (error) {
-    console.error('❌ Error getting verification status:', error);
+    console.error('Error getting verification status:', error);
     return { success: false, message: 'Ошибка при получении статуса' };
   }
 };
@@ -241,15 +230,11 @@ const getVerificationStatus = async (userId) => {
 // Функция для автоматической верификации номера телефона
 const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
   try {
-    console.log(`🔍 Looking for users with phone number: ${phoneNumber} and chatId: ${chatId}`);
-    
     // Сначала ищем пользователя по chatId (если он был сохранен)
     let users = await User.find({ 
       telegramChatId: chatId,
       phoneVerified: false 
     });
-    
-    console.log(`📱 Found ${users.length} users with chatId ${chatId}`);
     
     // Если не нашли по chatId, ищем по номеру телефона
     if (users.length === 0) {
@@ -257,7 +242,6 @@ const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
         phoneNumber: phoneNumber,
         phoneVerified: false 
       });
-      console.log(`📱 Found ${users.length} users with phone number ${phoneNumber}`);
     }
     
     // Если все еще не нашли, ищем пользователей без номера телефона (для новых пользователей)
@@ -266,7 +250,6 @@ const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
         phoneNumber: { $exists: false },
         phoneVerified: false 
       });
-      console.log(`📱 Found ${users.length} users without phone number`);
     }
     
     if (users.length > 0) {
@@ -277,12 +260,9 @@ const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
         user.phoneVerifiedAt = new Date();
         user.telegramChatId = chatId; // Сохраняем chatId для будущих верификаций
         await user.save();
-        
-        console.log(`✅ Auto-verified phone for user ${user.username} (${user._id}): ${phoneNumber}`);
       }
     } else {
       // Если пользователь не найден, сохраняем информацию для последующей верификации
-      console.log(`📝 Phone number ${phoneNumber} ready for verification (chatId: ${chatId})`);
       
       // Создаем временную запись для последующей верификации
       const tempUser = new User({
@@ -296,12 +276,11 @@ const autoVerifyPhoneNumber = async (chatId, phoneNumber) => {
       });
       
       await tempUser.save();
-      console.log(`📝 Created temporary user for phone ${phoneNumber} (chatId: ${chatId})`);
     }
     
     return { success: true, message: 'Номер телефона автоматически верифицирован' };
   } catch (error) {
-    console.error('❌ Error auto-verifying phone number:', error);
+    console.error('Error auto-verifying phone number:', error);
     return { success: false, message: 'Ошибка при автоматической верификации' };
   }
 };
@@ -314,95 +293,76 @@ setInterval(() => {
   for (const [code, state] of userStates.entries()) {
     if (now - state.timestamp > maxAge) {
       userStates.delete(code);
-      console.log(`🗑️ Expired verification code removed: ${code}`);
     }
   }
 }, 5 * 60 * 1000); // 5 минут
 
 // Обработка ошибок
 bot.on('error', (error) => {
-  console.error('❌ Telegram bot error:', error);
+  console.error('Telegram bot error:', error);
   
   // Обработка rate limiting (429)
   if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 429) {
     const retryAfter = error.response.headers['retry-after'] || 60;
-    console.log(`⏳ Rate limit exceeded. Waiting ${retryAfter} seconds before retry...`);
     
     setTimeout(() => {
-      console.log('🔄 Retrying after rate limit...');
+      // Retry logic
     }, retryAfter * 1000);
     return;
   }
   
   // Если ошибка связана с конфликтом, попробуем перезапустить бота
   if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
-    console.log('🔄 Detected bot conflict, attempting to restart...');
     setTimeout(() => {
       try {
         bot.stopPolling();
         setTimeout(() => {
           bot.startPolling();
-          console.log('✅ Bot restarted successfully');
         }, 2000);
       } catch (restartError) {
-        console.error('❌ Failed to restart bot:', restartError);
+        console.error('Failed to restart bot:', restartError);
       }
     }, 1000);
   }
 });
 
 bot.on('polling_error', (error) => {
-  console.error('❌ Telegram bot polling error:', error);
+  console.error('Telegram bot polling error:', error);
   
   // Обработка rate limiting (429)
   if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 429) {
     const retryAfter = error.response.headers['retry-after'] || 60;
-    console.log(`⏳ Rate limit exceeded. Waiting ${retryAfter} seconds before retry...`);
     
     setTimeout(() => {
-      console.log('🔄 Retrying polling after rate limit...');
+      // Retry logic
     }, retryAfter * 1000);
     return;
   }
   
   // Если ошибка связана с конфликтом, попробуем перезапустить бота
   if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
-    console.log('🔄 Detected polling conflict, attempting to restart...');
     setTimeout(() => {
       try {
         bot.stopPolling();
         setTimeout(() => {
           bot.startPolling();
-          console.log('✅ Bot polling restarted successfully');
         }, 2000);
       } catch (restartError) {
-        console.error('❌ Failed to restart bot polling:', restartError);
+        console.error('Failed to restart bot polling:', restartError);
       }
     }, 1000);
   }
 });
 
-// Обработка успешного подключения
-bot.on('polling_start', () => {
-  console.log('✅ Bot polling started successfully');
-});
-
-bot.on('polling_stop', () => {
-  console.log('🛑 Bot polling stopped');
-});
-
 // Функция для принудительной остановки всех экземпляров бота
 const forceStopBot = async () => {
   try {
-    console.log('🛑 Force stopping bot...');
-    
     // Останавливаем polling если он запущен
     if (bot && typeof bot.stopPolling === 'function') {
       try {
         bot.stopPolling();
-        console.log('✅ Bot polling stopped');
       } catch (pollingError) {
-        console.log('⚠️ Error stopping polling (might already be stopped):', pollingError.message);
+        // Polling might already be stopped
       }
     }
     
@@ -410,9 +370,8 @@ const forceStopBot = async () => {
     if (bot && typeof bot.stopWebhook === 'function') {
       try {
         bot.stopWebhook();
-        console.log('✅ Bot webhook stopped');
       } catch (webhookError) {
-        console.log('⚠️ Error stopping webhook (might already be stopped):', webhookError.message);
+        // Webhook might already be stopped
       }
     }
     
@@ -423,27 +382,21 @@ const forceStopBot = async () => {
         // Добавляем небольшую задержку перед закрытием
         await new Promise(resolve => setTimeout(resolve, 1000));
         bot.close();
-        console.log('✅ Bot connection closed');
       } catch (closeError) {
-        console.log('⚠️ Error closing bot connection (might already be closed):', closeError.message);
+        // Connection might already be closed
       }
     }
-    
-    console.log('✅ Bot force stopped');
   } catch (error) {
-    console.error('❌ Error force stopping bot:', error);
+    console.error('Error force stopping bot:', error);
   }
 };
 
 // Запуск бота
 const startBot = async () => {
   try {
-    console.log('🤖 Starting Telegram bot...');
-    
     // Проверяем подключение к БД
     const isConnected = await checkDBConnection();
     if (!isConnected) {
-      console.log('⏳ Waiting for MongoDB connection...');
       // Ждем подключения к БД
       let attempts = 0;
       while (mongoose.connection.readyState !== 1 && attempts < 30) {
@@ -464,24 +417,19 @@ const startBot = async () => {
     // Проверяем, что бот работает (без принудительной остановки)
     try {
       const me = await bot.getMe();
-      console.log('✅ Bot polling started successfully');
-      console.log(`🤖 Bot info: @${me.username} (${me.first_name})`);
     } catch (launchError) {
-      console.error('❌ Error checking bot status:', launchError);
+      console.error('Error checking bot status:', launchError);
       
       // Если это rate limiting, ждем и пробуем снова
       if (launchError.code === 'ETELEGRAM' && launchError.response && launchError.response.statusCode === 429) {
         const retryAfter = launchError.response.headers['retry-after'] || 60;
-        console.log(`⏳ Rate limit exceeded. Waiting ${retryAfter} seconds before retry...`);
         
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
         
         try {
           const me = await bot.getMe();
-          console.log('✅ Bot polling started successfully after rate limit wait');
-          console.log(`🤖 Bot info: @${me.username} (${me.first_name})`);
         } catch (retryError) {
-          console.error('❌ Error after rate limit retry:', retryError);
+          console.error('Error after rate limit retry:', retryError);
           throw retryError;
         }
       } else {
@@ -489,14 +437,9 @@ const startBot = async () => {
       }
     }
     
-    console.log('🤖 Telegram bot started successfully');
-    console.log('📱 Bot token:', token ? `${token.substring(0, 10)}...` : 'NOT SET');
-    console.log('🔗 Users can start the bot with /start');
-    
   } catch (error) {
-    console.error('❌ Error starting Telegram bot:', error);
+    console.error('Error starting Telegram bot:', error);
     // Не выбрасываем ошибку, чтобы сервер продолжал работать
-    console.log('⚠️ Telegram bot failed to start, but server continues running');
   }
 };
 
@@ -512,10 +455,9 @@ const linkUserToChat = async (userId, chatId) => {
     user.telegramChatId = chatId;
     await user.save();
     
-    console.log(`🔗 Linked user ${user.username} (${userId}) to chatId ${chatId}`);
     return { success: true, message: 'Пользователь связан с Telegram' };
   } catch (error) {
-    console.error('❌ Error linking user to chat:', error);
+    console.error('Error linking user to chat:', error);
     return { success: false, message: 'Ошибка при связывании пользователя' };
   }
 };
@@ -533,12 +475,10 @@ module.exports = {
 
 // Обработка закрытия процесса
 process.on('SIGINT', async () => {
-  console.log('🛑 Received SIGINT, stopping bot gracefully...');
   try {
     await forceStopBot();
-    console.log('✅ Bot stopped gracefully');
   } catch (error) {
-    console.error('❌ Error during graceful shutdown:', error);
+    console.error('Error during graceful shutdown:', error);
   }
   // Даем время на завершение операций
   setTimeout(() => {
@@ -547,12 +487,10 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, stopping bot gracefully...');
   try {
     await forceStopBot();
-    console.log('✅ Bot stopped gracefully');
   } catch (error) {
-    console.error('❌ Error during graceful shutdown:', error);
+    console.error('Error during graceful shutdown:', error);
   }
   // Даем время на завершение операций
   setTimeout(() => {
@@ -562,7 +500,7 @@ process.on('SIGTERM', async () => {
 
 // Обработка необработанных ошибок
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  console.error('Uncaught Exception:', error);
   // Не завершаем процесс сразу, даем время на логирование
   setTimeout(() => {
     process.exit(1);
@@ -570,7 +508,7 @@ process.on('uncaughtException', (error) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   // Не завершаем процесс сразу, даем время на логирование
   setTimeout(() => {
     process.exit(1);
