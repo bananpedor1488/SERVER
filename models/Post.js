@@ -11,6 +11,13 @@ const postSchema = new mongoose.Schema({
     required: true,
     maxlength: 280
   },
+  files: [{
+    filename: String,
+    originalName: String,
+    mimetype: String,
+    size: Number,
+    url: String
+  }],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

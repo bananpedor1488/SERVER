@@ -109,6 +109,9 @@ app.options('*', (req, res) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Статический маршрут для загруженных файлов
+app.use('/uploads', express.static('uploads'));
+
 // JWT Middleware для проверки токенов
 const authenticateToken = (req, res, next) => {
   // Разрешаем preflight-запросы (OPTIONS) без токена

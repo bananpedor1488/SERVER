@@ -4,6 +4,7 @@ const Repost = require('../models/Repost');
 const Comment = require('../models/Comment');
 const User = require('../models/User');
 const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
+const { uploadFiles, handleUploadError } = require('../middleware/upload');
 const router = express.Router();
 
 // Middleware проверки сессии
@@ -137,14 +138,31 @@ router.get('/', isAuth, async (req, res) => {
 });
 
 // Создать пост
-router.post('/', isAuth, async (req, res) => {
+router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
   try {
     const content = req.body.content?.trim();
-    if (!content) return res.status(400).json({ message: 'Content required' });
+    if (!content && (!req.files || req.files.length === 0)) {
+      return res.status(400).json({ message: 'Content or files required' });
+    }
+
+    // Обрабатываем загруженные файлы
+    const files = [];
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        files.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          url: `/uploads/${file.filename}`
+        });
+      });
+    }
 
     const post = await Post.create({
       author: req.session.user.id,
-      content
+      content: content || '',
+      files: files
     });
 
     const populated = await post.populate('author', 'username displayName avatar premium');
