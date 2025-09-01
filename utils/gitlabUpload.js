@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 // Конфигурация GitLab
-const GITLAB_TOKEN = 'glpat-HSRmN5i2RM7pbzVu9YZZK286MQp1Omh2N2ZlCw.01.1214lr8of';
+const GITLAB_TOKEN = 'glpat-HSRmNi2RM7pbzVu9YZZK286MQp1Omh2N2ZlCw.01.1214lr8of';
 const GITLAB_URL = 'https://gitlab.com';
 const GITLAB_PROJECT_ID = '796e02a65991f829fb08189b820390acbef4f11c';
 
@@ -28,10 +28,15 @@ async function createProjectIfNotExists() {
       console.log('Проект не найден, создаем новый...');
       
       try {
-        // Создаем новый проект
+        // Сначала получаем информацию о текущем пользователе для namespace
+        const userResponse = await gitlabApi.get('/user');
+        const username = userResponse.data.username;
+        
+        // Создаем новый проект с правильным namespace
         const createResponse = await gitlabApi.post('/projects', {
           name: 'SocialSpace-Files',
           path: 'socialspace-files',
+          namespace_id: userResponse.data.id, // Используем ID пользователя как namespace
           description: 'Хранилище файлов для SocialSpace',
           visibility: 'private',
           initialize_with_readme: true,
@@ -44,7 +49,7 @@ async function createProjectIfNotExists() {
         // Возвращаем информацию о созданном проекте
         return createResponse.data;
       } catch (createError) {
-        console.error('Ошибка при создании проекта:', createError.response?.data?.message || createError.message);
+        console.error('Ошибка при создании проекта:', createError.response?.data || createError.message);
         
         // Если не удалось создать проект, попробуем найти доступный
         console.log('Пытаемся найти доступный проект...');
@@ -52,15 +57,20 @@ async function createProjectIfNotExists() {
           const projectsResponse = await gitlabApi.get('/projects', {
             params: {
               membership: true,
-              per_page: 1,
+              per_page: 5, // Увеличиваем количество для лучшего выбора
               order_by: 'updated_at',
               sort: 'desc'
             }
           });
           
           if (projectsResponse.data.length > 0) {
+            console.log(`Найдено ${projectsResponse.data.length} доступных проектов:`);
+            projectsResponse.data.forEach((project, index) => {
+              console.log(`${index + 1}. ${project.name} (ID: ${project.id}) - ${project.visibility}`);
+            });
+            
             const availableProject = projectsResponse.data[0];
-            console.log(`Найден доступный проект: ${availableProject.name} (ID: ${availableProject.id})`);
+            console.log(`Используем проект: ${availableProject.name} (ID: ${availableProject.id})`);
             console.log('⚠️ ВАЖНО: Обновите GITLAB_PROJECT_ID в gitlabUpload.js на:', availableProject.id);
             return availableProject;
           }
@@ -68,7 +78,25 @@ async function createProjectIfNotExists() {
           console.error('Не удалось найти доступные проекты:', findError.message);
         }
         
-        throw new Error('Не удалось создать или найти доступный проект GitLab');
+        // Последняя попытка - создать проект в корневом namespace
+        try {
+          console.log('Пытаемся создать проект в корневом namespace...');
+          const createResponse = await gitlabApi.post('/projects', {
+            name: 'SocialSpace-Files',
+            path: 'socialspace-files',
+            description: 'Хранилище файлов для SocialSpace',
+            visibility: 'private',
+            initialize_with_readme: true,
+            default_branch: 'main'
+          });
+          
+          console.log('Новый проект создан в корневом namespace:', createResponse.data.name);
+          console.log('⚠️ ВАЖНО: Обновите GITLAB_PROJECT_ID в gitlabUpload.js на:', createResponse.data.id);
+          return createResponse.data;
+        } catch (rootCreateError) {
+          console.error('Не удалось создать проект даже в корневом namespace:', rootCreateError.response?.data || rootCreateError.message);
+          throw new Error('Не удалось создать или найти доступный проект GitLab');
+        }
       }
     } else {
       throw error;
@@ -89,6 +117,53 @@ async function checkProjectExists() {
 }
 
 /**
+ * Убеждается, что папка uploads существует в репозитории
+ */
+async function ensureUploadsFolder() {
+  try {
+    const project = await checkProjectExists();
+    const projectId = project.id;
+
+    // Проверяем, существует ли папка uploads
+    try {
+      const response = await gitlabApi.get(`/projects/${projectId}/repository/tree`, {
+        params: { path: 'uploads', ref: 'main' }
+      });
+      
+      if (response.data.length > 0) {
+        console.log('Папка uploads уже существует.');
+        return true;
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        console.log('Папка uploads не найдена, создаем...');
+        
+        // Создаем папку uploads, загружая пустой файл .gitkeep
+        try {
+          await gitlabApi.post(`/projects/${projectId}/repository/files/uploads%2F.gitkeep`, {
+            branch: 'main',
+            content: '', // Пустой файл
+            commit_message: 'Create uploads folder',
+            encoding: 'base64'
+          });
+          console.log('Папка uploads создана.');
+          return true;
+        } catch (createError) {
+          console.error('Ошибка при создании папки uploads:', createError.response?.data || createError.message);
+          return false;
+        }
+      }
+      throw error;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Ошибка при проверке/создании папки uploads:', error);
+    return false;
+  }
+}
+
+/**
  * Загружает файл на GitLab и возвращает ссылку на него
  * @param {Buffer} fileBuffer - Буфер файла
  * @param {string} fileName - Имя файла
@@ -100,6 +175,9 @@ async function uploadFileToGitLab(fileBuffer, fileName, mimeType) {
     // Убеждаемся, что проект существует
     const project = await checkProjectExists();
     const projectId = project.id;
+    
+    // Убеждаемся, что папка uploads существует
+    await ensureUploadsFolder();
     
     // Создаем уникальное имя файла с временной меткой
     const timestamp = Date.now();
@@ -214,5 +292,6 @@ module.exports = {
   readFileFromGitLab,
   deleteFileFromGitLab,
   listFilesInUploads,
-  checkProjectExists
+  checkProjectExists,
+  ensureUploadsFolder
 };
