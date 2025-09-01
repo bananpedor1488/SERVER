@@ -149,12 +149,16 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     const files = [];
     if (req.files && req.files.length > 0) {
       req.files.forEach(file => {
+        const base64Data = file.buffer.toString('base64');
+        const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
+        
         files.push({
-          filename: file.filename,
+          filename: file.originalname,
           originalName: file.originalname,
           mimetype: file.mimetype,
           size: file.size,
-          url: `/uploads/${file.filename}`
+          data: dataUrl,
+          url: dataUrl // Используем data URL для совместимости
         });
       });
     }

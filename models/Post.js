@@ -16,7 +16,8 @@ const postSchema = new mongoose.Schema({
     originalName: String,
     mimetype: String,
     size: Number,
-    url: String
+    data: String, // base64 данные файла
+    url: String   // для обратной совместимости
   }],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,

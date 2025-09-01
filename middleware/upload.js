@@ -1,24 +1,7 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-// Создаем папку uploads если её нет
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Настройка хранилища
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // Генерируем уникальное имя файла
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Настройка хранилища в памяти (для base64)
+const storage = multer.memoryStorage();
 
 // Фильтр файлов
 const fileFilter = (req, file, cb) => {
@@ -89,6 +72,5 @@ const handleUploadError = (err, req, res, next) => {
 
 module.exports = {
   uploadFiles,
-  handleUploadError,
-  uploadDir
+  handleUploadError
 };
