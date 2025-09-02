@@ -5,23 +5,19 @@ const Comment = require('../models/Comment');
 const User = require('../models/User');
 const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
 const { uploadFiles, handleUploadError } = require('../middleware/upload');
-const { uploadFileToDropbox } = require('../utils/dropboxUpload');
+const { uploadFileToImgBB } = require('../utils/imgbbUpload');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 
-// Функция для проверки конфигурации Dropbox
-const checkDropboxConfig = () => {
-  const hasToken = !!process.env.DROPBOX_TOKEN;
-  const hasAppConfig = !!(process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET && process.env.DROPBOX_REFRESH_TOKEN);
+// Функция для проверки конфигурации ImgBB
+const checkImgBBConfig = () => {
+  const hasApiKey = !!process.env.IMGBB_API_KEY;
   
-  console.log('Dropbox конфигурация:');
-  console.log('- DROPBOX_TOKEN:', hasToken ? 'Настроен' : 'Не настроен');
-  console.log('- DROPBOX_APP_KEY:', process.env.DROPBOX_APP_KEY ? 'Настроен' : 'Не настроен');
-  console.log('- DROPBOX_APP_SECRET:', process.env.DROPBOX_APP_SECRET ? 'Настроен' : 'Не настроен');
-  console.log('- DROPBOX_REFRESH_TOKEN:', process.env.DROPBOX_REFRESH_TOKEN ? 'Настроен' : 'Не настроен');
+  console.log('ImgBB конфигурация:');
+  console.log('- IMGBB_API_KEY:', hasApiKey ? 'Настроен' : 'Не настроен');
   
-  return hasToken || hasAppConfig;
+  return hasApiKey;
 };
 
 // Middleware проверки сессии
@@ -161,8 +157,7 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     console.log('Пользователь:', req.session.user.id);
     console.log('Контент:', req.body.content);
     console.log('Файлы:', req.files ? req.files.length : 0);
-    console.log('Dropbox токен:', process.env.DROPBOX_TOKEN ? 'Настроен' : 'Не настроен');
-    console.log('Dropbox App Key:', process.env.DROPBOX_APP_KEY ? 'Настроен' : 'Не настроен');
+    // Dropbox больше не используется
     
     const content = req.body.content?.trim();
     if (!content && (!req.files || req.files.length === 0)) {
@@ -175,11 +170,11 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     if (req.files && req.files.length > 0) {
       console.log(`Обрабатываем ${req.files.length} файлов...`);
       
-      // Проверяем конфигурацию Dropbox
-      const dropboxConfigured = checkDropboxConfig();
+      // Проверяем конфигурацию ImgBB
+      const imgbbConfigured = checkImgBBConfig();
       
-      if (!dropboxConfigured) {
-        console.error('Dropbox не настроен! Необходимо настроить переменные окружения.');
+      if (!imgbbConfigured) {
+        console.error('ImgBB не настроен! Необходимо настроить переменные окружения.');
         return res.status(500).json({ 
           message: 'Файловое хранилище не настроено. Обратитесь к администратору.' 
         });
@@ -187,10 +182,17 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       
       for (const file of req.files) {
         try {
+          // Проверяем размер файла (максимум 32MB для ImgBB)
+          const maxSize = 32 * 1024 * 1024; // 32MB
+          if (file.size > maxSize) {
+            return res.status(400).json({ 
+              message: `Файл ${file.originalname} слишком большой. Максимальный размер: 32MB` 
+            });
+          }
           
-          // Загружаем файл в Dropbox
-          console.log(`Загружаем файл ${file.originalname} в Dropbox...`);
-          const dbx = await uploadFileToDropbox(
+          // Загружаем файл в ImgBB
+          console.log(`Загружаем файл ${file.originalname} в ImgBB...`);
+          const imgbbResult = await uploadFileToImgBB(
             file.buffer, 
             file.originalname, 
             file.mimetype
@@ -200,16 +202,18 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
             filename: file.originalname,
             originalName: file.originalname,
             mimetype: file.mimetype,
-            size: file.size,
-            url: dbx.url,                 // Прямая ссылка Dropbox (?dl=1)
-            dropboxPath: dbx.dropboxPath, // Путь в Dropbox для удаления/управления
-            fileName: dbx.fileName        // Имя файла
+            size: imgbbResult.size,
+            url: imgbbResult.url,           // URL ImgBB
+            displayUrl: imgbbResult.displayUrl, // URL для отображения
+            deleteUrl: imgbbResult.deleteUrl,   // URL для удаления
+            fileName: imgbbResult.fileName,
+            id: imgbbResult.id
           });
           
-          console.log(`Файл ${file.originalname} успешно загружен в Dropbox:`, {
-            url: dbx.url,
-            dropboxPath: dbx.dropboxPath,
-            fileName: dbx.fileName
+          console.log(`Файл ${file.originalname} успешно загружен в ImgBB:`, {
+            url: imgbbResult.url,
+            displayUrl: imgbbResult.displayUrl,
+            id: imgbbResult.id
           });
         } catch (uploadError) {
           console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
@@ -267,7 +271,7 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       });
     }
     
-    if (error.message.includes('Dropbox')) {
+    if (error.message.includes('ImgBB')) {
       return res.status(500).json({ 
         message: 'File upload service unavailable. Please try again later.' 
       });

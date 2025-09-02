@@ -177,33 +177,17 @@ async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
 
     console.log('Файл успешно загружен в Dropbox:', uploadResult.result);
 
-    // Создаем временную ссылку для прямого скачивания из Dropbox
-    try {
-      const tempLink = await dbx.filesGetTemporaryLink({ path: dropboxPath });
-      const directUrl = tempLink.result.link;
-      
-      console.log(`Временная ссылка создана: ${directUrl}`);
+    // Вместо создания публичной ссылки, возвращаем путь для скачивания через наш API
+    const downloadUrl = `https://server-pqqy.onrender.com/api/files/download/${encodeURIComponent(dropboxPath)}`;
 
-      return {
-        url: directUrl,
-        dropboxPath,
-        fileName: `${timestamp}_${safeName}`,
-        mimeType
-      };
-    } catch (tempError) {
-      console.error('Ошибка создания временной ссылки:', tempError);
-      
-      // Fallback на наш API если временная ссылка не работает
-      const downloadUrl = `https://server-pqqy.onrender.com/api/files/download/${encodeURIComponent(dropboxPath)}`;
-      console.log(`Fallback на API: ${downloadUrl}`);
+    console.log(`URL для скачивания через API: ${downloadUrl}`);
 
-      return {
-        url: downloadUrl,
-        dropboxPath,
-        fileName: `${timestamp}_${safeName}`,
-        mimeType
-      };
-    }
+    return {
+      url: downloadUrl,
+      dropboxPath,
+      fileName: `${timestamp}_${safeName}`,
+      mimeType
+    };
   } catch (error) {
     console.error('Ошибка загрузки в Dropbox:', error);
     
@@ -236,27 +220,11 @@ async function listFilesInUploads() {
   return (res.entries || []).filter(e => e['.tag'] === 'file');
 }
 
-// Функция для обновления временной ссылки
-async function refreshTemporaryLink(dropboxPath) {
-  if (!dbx) {
-    throw new Error('Dropbox is not configured');
-  }
-  
-  try {
-    const tempLink = await dbx.filesGetTemporaryLink({ path: dropboxPath });
-    return tempLink.result.link;
-  } catch (error) {
-    console.error('Ошибка обновления временной ссылки:', error);
-    throw error;
-  }
-}
-
 module.exports = {
   uploadFileToDropbox,
   readFileFromDropbox,
   deleteFileFromDropbox,
   listFilesInUploads,
   ensureBaseFolder,
-  checkDropboxPermissions,
-  refreshTemporaryLink
+  checkDropboxPermissions
 };

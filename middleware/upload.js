@@ -33,7 +33,7 @@ const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB максимум
+    fileSize: 32 * 1024 * 1024, // 32MB максимум для ImgBB
     files: 5 // Максимум 5 файлов
   }
 });
@@ -46,7 +46,7 @@ const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ 
-        message: 'Файл слишком большой. Максимальный размер: 10MB' 
+        message: 'Файл слишком большой. Максимальный размер: 32MB' 
       });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {

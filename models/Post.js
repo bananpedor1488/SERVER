@@ -18,9 +18,12 @@ const postSchema = new mongoose.Schema({
     originalName: String,
     mimetype: String,
     size: Number,
-    url: String,         // Прямая ссылка Dropbox (?dl=1)
-    dropboxPath: String, // Путь к файлу в Dropbox для удаления/управления
-    fileName: String     // Имя файла
+    url: String,           // URL ImgBB
+    displayUrl: String,    // URL для отображения
+    deleteUrl: String,     // URL для удаления
+    fileName: String,      // Имя файла
+    id: String,           // ID файла в ImgBB
+    format: String        // Формат файла
   }],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
