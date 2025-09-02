@@ -10,10 +10,35 @@ const DROPBOX_APP_SECRET = process.env.DROPBOX_APP_SECRET; // App secret
 let dbx;
 if (DROPBOX_TOKEN) {
   dbx = new Dropbox({ accessToken: DROPBOX_TOKEN, fetch });
+  console.log('Dropbox инициализирован с токеном доступа');
 } else if (DROPBOX_REFRESH_TOKEN && DROPBOX_APP_KEY && DROPBOX_APP_SECRET) {
   dbx = new Dropbox({ clientId: DROPBOX_APP_KEY, clientSecret: DROPBOX_APP_SECRET, refreshToken: DROPBOX_REFRESH_TOKEN, fetch });
+  console.log('Dropbox инициализирован с OAuth конфигурацией');
 } else {
   console.warn('Warning: Dropbox is not fully configured. Set DROPBOX_TOKEN or (DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN).');
+}
+
+// Функция для проверки прав доступа Dropbox
+async function checkDropboxPermissions() {
+  if (!dbx) {
+    console.error('Dropbox не инициализирован');
+    return false;
+  }
+  
+  try {
+    console.log('Проверяем права доступа Dropbox...');
+    const account = await dbx.usersGetCurrentAccount();
+    console.log('Dropbox аккаунт:', account.result.email);
+    
+    // Проверяем права на создание ссылок
+    const features = await dbx.usersGetAccount();
+    console.log('Dropbox функции аккаунта:', features.result);
+    
+    return true;
+  } catch (error) {
+    console.error('Ошибка проверки прав Dropbox:', error);
+    return false;
+  }
 }
 
 // Ensure base folder exists
@@ -38,6 +63,11 @@ function toDirectDownloadUrl(sharedUrl) {
     return null;
   }
   
+  if (typeof sharedUrl !== 'string') {
+    console.log('toDirectDownloadUrl: sharedUrl is not a string:', typeof sharedUrl, sharedUrl);
+    return null;
+  }
+  
   // Убираем все параметры и добавляем ?dl=1 для прямого скачивания
   const baseUrl = sharedUrl.split('?')[0];
   const directUrl = baseUrl + '?dl=1';
@@ -48,19 +78,76 @@ function toDirectDownloadUrl(sharedUrl) {
 
 async function getOrCreateSharedLink(path) {
   try {
+    console.log(`Проверяем существующие ссылки для ${path}...`);
+    
+    // Сначала проверяем существующие ссылки
     const existing = await dbx.sharingListSharedLinks({ path, direct_only: true });
     if (existing.links && existing.links.length > 0) {
       const directUrl = toDirectDownloadUrl(existing.links[0].url);
-      console.log(`Found existing shared link for ${path}:`, directUrl);
+      console.log(`Найдена существующая ссылка для ${path}:`, directUrl);
       return directUrl;
     }
+    
+    console.log(`Создаем новую публичную ссылку для ${path}...`);
+    
+    // Создаем новую ссылку с настройками
+    const created = await dbx.sharingCreateSharedLinkWithSettings({ 
+      path,
+      settings: {
+        requested_visibility: 'public',
+        audience: 'public',
+        access: 'viewer'
+      }
+    });
+    
+    console.log('Dropbox API ответ при создании ссылки:', created);
+    
+    if (created && created.url) {
+      const directUrl = toDirectDownloadUrl(created.url);
+      console.log(`Создана новая ссылка для ${path}:`, directUrl);
+      return directUrl;
+    } else {
+      console.error('Dropbox API не вернул URL в ответе:', created);
+      return null;
+    }
+    
   } catch (error) {
-    console.log(`No existing shared link for ${path}:`, error.message);
+    console.error(`Ошибка при создании ссылки для ${path}:`, error);
+    console.error('Детали ошибки:', {
+      message: error.message,
+      status: error.status,
+      error: error.error
+    });
+    
+    // Пробуем альтернативный способ - создание ссылки без настроек
+    try {
+      console.log(`Пробуем альтернативный способ создания ссылки для ${path}...`);
+      const simpleCreated = await dbx.sharingCreateSharedLinkWithSettings({ path });
+      
+      if (simpleCreated && simpleCreated.url) {
+        const directUrl = toDirectDownloadUrl(simpleCreated.url);
+        console.log(`Альтернативная ссылка создана для ${path}:`, directUrl);
+        return directUrl;
+      }
+    } catch (altError) {
+      console.error(`Альтернативный способ тоже не сработал:`, altError);
+    }
+    
+    // Последний способ - создаем временную ссылку
+    try {
+      console.log(`Пробуем создать временную ссылку для ${path}...`);
+      const tempLink = await dbx.filesGetTemporaryLink({ path });
+      
+      if (tempLink && tempLink.link) {
+        console.log(`Временная ссылка создана для ${path}:`, tempLink.link);
+        return tempLink.link;
+      }
+    } catch (tempError) {
+      console.error(`Создание временной ссылки не удалось:`, tempError);
+    }
+    
+    return null;
   }
-  const created = await dbx.sharingCreateSharedLinkWithSettings({ path });
-  const directUrl = toDirectDownloadUrl(created.url);
-  console.log(`Created new shared link for ${path}:`, directUrl);
-  return directUrl;
 }
 
 async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
@@ -70,6 +157,12 @@ async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
   }
   
   try {
+    // Проверяем права доступа
+    const hasPermissions = await checkDropboxPermissions();
+    if (!hasPermissions) {
+      console.warn('Предупреждение: Не удалось проверить права Dropbox, продолжаем...');
+    }
+    
     await ensureBaseFolder();
 
     const timestamp = Date.now();
@@ -140,5 +233,6 @@ module.exports = {
   readFileFromDropbox,
   deleteFileFromDropbox,
   listFilesInUploads,
-  ensureBaseFolder
+  ensureBaseFolder,
+  checkDropboxPermissions
 };

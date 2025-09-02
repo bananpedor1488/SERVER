@@ -440,6 +440,33 @@ app.get('/api/test-auth', authenticateToken, (req, res) => {
   });
 });
 
+// Тестовый роут для проверки Dropbox
+app.get('/api/test-dropbox', async (req, res) => {
+  try {
+    const { checkDropboxPermissions } = require('./utils/dropboxUpload');
+    
+    const hasPermissions = await checkDropboxPermissions();
+    
+    res.json({
+      message: 'Dropbox test completed',
+      configured: hasPermissions,
+      timestamp: new Date().toISOString(),
+      environment: {
+        hasToken: !!process.env.DROPBOX_TOKEN,
+        hasAppKey: !!process.env.DROPBOX_APP_KEY,
+        hasAppSecret: !!process.env.DROPBOX_APP_SECRET,
+        hasRefreshToken: !!process.env.DROPBOX_REFRESH_TOKEN
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Dropbox test failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Health check
 app.get('/api/health', async (req, res) => {
   try {
