@@ -141,19 +141,50 @@ router.get('/', isAuth, async (req, res) => {
 // Создать пост
 router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
   try {
+    console.log('=== Создание нового поста ===');
+    console.log('Пользователь:', req.session.user.id);
+    console.log('Контент:', req.body.content);
+    console.log('Файлы:', req.files ? req.files.length : 0);
+    console.log('Dropbox токен:', process.env.DROPBOX_TOKEN ? 'Настроен' : 'Не настроен');
+    console.log('Dropbox App Key:', process.env.DROPBOX_APP_KEY ? 'Настроен' : 'Не настроен');
+    
     const content = req.body.content?.trim();
     if (!content && (!req.files || req.files.length === 0)) {
+      console.log('Ошибка: Нет контента и файлов');
       return res.status(400).json({ message: 'Content or files required' });
     }
 
     // Обрабатываем загруженные файлы
     const files = [];
     if (req.files && req.files.length > 0) {
-      console.log(`Загружаем ${req.files.length} файлов в Dropbox...`);
+      console.log(`Обрабатываем ${req.files.length} файлов...`);
       
       for (const file of req.files) {
         try {
+          // Проверяем, настроен ли Dropbox
+          if (!process.env.DROPBOX_TOKEN && !process.env.DROPBOX_APP_KEY) {
+            console.warn('Dropbox не настроен, сохраняем файл как base64...');
+            
+            // Сохраняем файл как base64 в базе данных
+            const base64Data = file.buffer.toString('base64');
+            const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
+            
+            files.push({
+              filename: file.originalname,
+              originalName: file.originalname,
+              mimetype: file.mimetype,
+              size: file.size,
+              url: dataUrl,           // Base64 data URL
+              dropboxPath: null,      // Нет пути в Dropbox
+              fileName: file.originalname
+            });
+            
+            console.log(`Файл ${file.originalname} сохранен как base64 (размер: ${file.size} байт)`);
+            continue;
+          }
+          
           // Загружаем файл в Dropbox
+          console.log(`Загружаем файл ${file.originalname} в Dropbox...`);
           const dbx = await uploadFileToDropbox(
             file.buffer, 
             file.originalname, 
@@ -177,6 +208,35 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
           });
         } catch (uploadError) {
           console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
+          
+          // Если это ошибка конфигурации Dropbox, сохраняем как base64
+          if (uploadError.message.includes('not configured')) {
+            console.warn(`Dropbox недоступен, сохраняем файл ${file.originalname} как base64...`);
+            
+            try {
+              const base64Data = file.buffer.toString('base64');
+              const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
+              
+              files.push({
+                filename: file.originalname,
+                originalName: file.originalname,
+                mimetype: file.mimetype,
+                size: file.size,
+                url: dataUrl,
+                dropboxPath: null,
+                fileName: file.originalname
+              });
+              
+              console.log(`Файл ${file.originalname} сохранен как base64 (размер: ${file.size} байт)`);
+              continue;
+            } catch (base64Error) {
+              console.error(`Ошибка сохранения файла как base64:`, base64Error);
+              return res.status(500).json({ 
+                message: `Ошибка обработки файла ${file.originalname}` 
+              });
+            }
+          }
+          
           return res.status(500).json({ 
             message: `Ошибка загрузки файла ${file.originalname}: ${uploadError.message}` 
           });
@@ -184,12 +244,14 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       }
     }
 
+    console.log('Создаем пост в базе данных...');
     const post = await Post.create({
       author: req.session.user.id,
       content: content || '',
       files: files
     });
 
+    console.log('Пост создан с ID:', post._id);
     const populated = await post.populate('author', 'username displayName avatar premium');
     
     // Добавляем пустой массив комментариев для консистентности
@@ -200,14 +262,39 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       isRepost: false
     };
 
+    console.log('Отправляем real-time обновление...');
     // Отправляем real-time обновление всем подключенным пользователям
     const io = req.app.get('io');
     io.to('posts').emit('newPost', postWithComments);
 
+    console.log('Пост успешно создан и отправлен клиентам');
     res.status(201).json(postWithComments);
   } catch (error) {
     console.error('Error creating post:', error);
-    res.status(500).json({ message: 'Error creating post' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    // Provide more specific error messages
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        message: 'Validation error', 
+        details: error.message 
+      });
+    }
+    
+    if (error.message.includes('Dropbox')) {
+      return res.status(500).json({ 
+        message: 'File upload service unavailable. Please try again later.' 
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Error creating post',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 
