@@ -109,7 +109,7 @@ app.options('*', (req, res) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Файлы теперь хранятся как base64 в MongoDB, статический маршрут не нужен
+// Файлы хранятся в Dropbox, локальное хранение не используется
 
 // JWT Middleware для проверки токенов
 const authenticateToken = (req, res, next) => {
@@ -446,6 +446,15 @@ app.get('/api/health', async (req, res) => {
     const dbState = mongoose.connection.readyState;
     const dbStatus = ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState];
     
+    // Проверяем конфигурацию Dropbox
+    const dropboxConfig = {
+      hasToken: !!process.env.DROPBOX_TOKEN,
+      hasAppKey: !!process.env.DROPBOX_APP_KEY,
+      hasAppSecret: !!process.env.DROPBOX_APP_SECRET,
+      hasRefreshToken: !!process.env.DROPBOX_REFRESH_TOKEN,
+      configured: !!(process.env.DROPBOX_TOKEN || (process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET && process.env.DROPBOX_REFRESH_TOKEN))
+    };
+    
     res.json({ 
       status: 'OK',
       timestamp: new Date().toISOString(),
@@ -454,6 +463,7 @@ app.get('/api/health', async (req, res) => {
         status: dbStatus,
         readyState: dbState
       },
+      dropbox: dropboxConfig,
       auth: {
         type: 'JWT Bearer Token',
         hasAuthHeader: !!req.get('Authorization')

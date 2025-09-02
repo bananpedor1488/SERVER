@@ -37,13 +37,12 @@ function toDirectDownloadUrl(sharedUrl) {
     console.log('toDirectDownloadUrl: sharedUrl is null or undefined');
     return null;
   }
-  if (sharedUrl.includes('?dl=')) {
-    const directUrl = sharedUrl.replace(/\?dl=\d$/, '?dl=1');
-    console.log('toDirectDownloadUrl: converted existing dl param:', directUrl);
-    return directUrl;
-  }
-  const directUrl = sharedUrl + '?dl=1';
-  console.log('toDirectDownloadUrl: added dl=1 param:', directUrl);
+  
+  // Убираем все параметры и добавляем ?dl=1 для прямого скачивания
+  const baseUrl = sharedUrl.split('?')[0];
+  const directUrl = baseUrl + '?dl=1';
+  
+  console.log('toDirectDownloadUrl: converted to direct download URL:', directUrl);
   return directUrl;
 }
 
@@ -65,34 +64,55 @@ async function getOrCreateSharedLink(path) {
 }
 
 async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
-  if (!dbx) throw new Error('Dropbox is not configured');
-  await ensureBaseFolder();
-
-  const timestamp = Date.now();
-  const safeName = fileName.replace(/[^\w\-.]/g, '_');
-  const dropboxPath = `${BASE_FOLDER}/${timestamp}_${safeName}`;
-
-  await dbx.filesUpload({
-    path: dropboxPath,
-    contents: fileBuffer,
-    mode: { '.tag': 'add' },
-    autorename: true,
-    mute: true
-  });
-
-  const directUrl = await getOrCreateSharedLink(dropboxPath);
-
-  if (!directUrl) {
-    console.error(`Failed to create shared link for ${dropboxPath}`);
-    throw new Error(`Failed to create shared link for file ${fileName}`);
+  if (!dbx) {
+    console.error('Dropbox не настроен! Проверьте переменные окружения.');
+    throw new Error('Dropbox is not configured. Please check environment variables.');
   }
+  
+  try {
+    await ensureBaseFolder();
 
-  return {
-    url: directUrl,
-    dropboxPath,
-    fileName: `${timestamp}_${safeName}`,
-    mimeType
-  };
+    const timestamp = Date.now();
+    const safeName = fileName.replace(/[^\w\-.]/g, '_');
+    const dropboxPath = `${BASE_FOLDER}/${timestamp}_${safeName}`;
+
+    console.log(`Загружаем файл в Dropbox: ${dropboxPath}`);
+    
+    const uploadResult = await dbx.filesUpload({
+      path: dropboxPath,
+      contents: fileBuffer,
+      mode: { '.tag': 'add' },
+      autorename: true,
+      mute: true
+    });
+
+    console.log('Файл успешно загружен в Dropbox:', uploadResult.result);
+
+    const directUrl = await getOrCreateSharedLink(dropboxPath);
+
+    if (!directUrl) {
+      console.error(`Не удалось создать публичную ссылку для ${dropboxPath}`);
+      throw new Error(`Failed to create shared link for file ${fileName}`);
+    }
+
+    console.log(`Публичная ссылка создана: ${directUrl}`);
+
+    return {
+      url: directUrl,
+      dropboxPath,
+      fileName: `${timestamp}_${safeName}`,
+      mimeType
+    };
+  } catch (error) {
+    console.error('Ошибка загрузки в Dropbox:', error);
+    
+    // Более детальная информация об ошибке
+    if (error.error) {
+      console.error('Dropbox API Error:', error.error);
+    }
+    
+    throw new Error(`Dropbox upload failed: ${error.message}`);
+  }
 }
 
 async function readFileFromDropbox(path) {

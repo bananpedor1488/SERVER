@@ -6,7 +6,23 @@ const User = require('../models/User');
 const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
 const { uploadFiles, handleUploadError } = require('../middleware/upload');
 const { uploadFileToDropbox } = require('../utils/dropboxUpload');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
+
+// Функция для проверки конфигурации Dropbox
+const checkDropboxConfig = () => {
+  const hasToken = !!process.env.DROPBOX_TOKEN;
+  const hasAppConfig = !!(process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET && process.env.DROPBOX_REFRESH_TOKEN);
+  
+  console.log('Dropbox конфигурация:');
+  console.log('- DROPBOX_TOKEN:', hasToken ? 'Настроен' : 'Не настроен');
+  console.log('- DROPBOX_APP_KEY:', process.env.DROPBOX_APP_KEY ? 'Настроен' : 'Не настроен');
+  console.log('- DROPBOX_APP_SECRET:', process.env.DROPBOX_APP_SECRET ? 'Настроен' : 'Не настроен');
+  console.log('- DROPBOX_REFRESH_TOKEN:', process.env.DROPBOX_REFRESH_TOKEN ? 'Настроен' : 'Не настроен');
+  
+  return hasToken || hasAppConfig;
+};
 
 // Middleware проверки сессии
 const isAuth = (req, res, next) => {
@@ -159,29 +175,18 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     if (req.files && req.files.length > 0) {
       console.log(`Обрабатываем ${req.files.length} файлов...`);
       
+      // Проверяем конфигурацию Dropbox
+      const dropboxConfigured = checkDropboxConfig();
+      
+      if (!dropboxConfigured) {
+        console.error('Dropbox не настроен! Необходимо настроить переменные окружения.');
+        return res.status(500).json({ 
+          message: 'Файловое хранилище не настроено. Обратитесь к администратору.' 
+        });
+      }
+      
       for (const file of req.files) {
         try {
-          // Проверяем, настроен ли Dropbox
-          if (!process.env.DROPBOX_TOKEN && !process.env.DROPBOX_APP_KEY) {
-            console.warn('Dropbox не настроен, сохраняем файл как base64...');
-            
-            // Сохраняем файл как base64 в базе данных
-            const base64Data = file.buffer.toString('base64');
-            const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
-            
-            files.push({
-              filename: file.originalname,
-              originalName: file.originalname,
-              mimetype: file.mimetype,
-              size: file.size,
-              url: dataUrl,           // Base64 data URL
-              dropboxPath: null,      // Нет пути в Dropbox
-              fileName: file.originalname
-            });
-            
-            console.log(`Файл ${file.originalname} сохранен как base64 (размер: ${file.size} байт)`);
-            continue;
-          }
           
           // Загружаем файл в Dropbox
           console.log(`Загружаем файл ${file.originalname} в Dropbox...`);
@@ -208,34 +213,11 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
           });
         } catch (uploadError) {
           console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
-          
-          // Если это ошибка конфигурации Dropbox, сохраняем как base64
-          if (uploadError.message.includes('not configured')) {
-            console.warn(`Dropbox недоступен, сохраняем файл ${file.originalname} как base64...`);
-            
-            try {
-              const base64Data = file.buffer.toString('base64');
-              const dataUrl = `data:${file.mimetype};base64,${base64Data}`;
-              
-              files.push({
-                filename: file.originalname,
-                originalName: file.originalname,
-                mimetype: file.mimetype,
-                size: file.size,
-                url: dataUrl,
-                dropboxPath: null,
-                fileName: file.originalname
-              });
-              
-              console.log(`Файл ${file.originalname} сохранен как base64 (размер: ${file.size} байт)`);
-              continue;
-            } catch (base64Error) {
-              console.error(`Ошибка сохранения файла как base64:`, base64Error);
-              return res.status(500).json({ 
-                message: `Ошибка обработки файла ${file.originalname}` 
-              });
-            }
-          }
+          console.error('Детали ошибки:', {
+            message: uploadError.message,
+            status: uploadError.status,
+            error: uploadError.error
+          });
           
           return res.status(500).json({ 
             message: `Ошибка загрузки файла ${file.originalname}: ${uploadError.message}` 
