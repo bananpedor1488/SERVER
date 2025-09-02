@@ -5,7 +5,7 @@ const Comment = require('../models/Comment');
 const User = require('../models/User');
 const { sendLikeNotification, sendCommentNotification, sendRepostNotification } = require('../utils/notificationUtils');
 const { uploadFiles, handleUploadError } = require('../middleware/upload');
-const { uploadFileToGitLab, checkProjectExists } = require('../utils/gitlabUpload');
+const { uploadFileToDropbox } = require('../utils/dropboxUpload');
 const router = express.Router();
 
 // Middleware проверки сессии
@@ -146,18 +146,15 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       return res.status(400).json({ message: 'Content or files required' });
     }
 
-    // Убеждаемся что проект GitLab существует
-    await checkProjectExists();
-
     // Обрабатываем загруженные файлы
     const files = [];
     if (req.files && req.files.length > 0) {
-      console.log(`Загружаем ${req.files.length} файлов на GitHub...`);
+      console.log(`Загружаем ${req.files.length} файлов в Dropbox...`);
       
       for (const file of req.files) {
         try {
-          // Загружаем файл на GitLab
-          const gitlabResult = await uploadFileToGitLab(
+          // Загружаем файл в Dropbox
+          const dbx = await uploadFileToDropbox(
             file.buffer, 
             file.originalname, 
             file.mimetype
@@ -168,16 +165,14 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
             originalName: file.originalname,
             mimetype: file.mimetype,
             size: file.size,
-            url: gitlabResult.url,           // GitLab raw URL
-            gitlabUrl: gitlabResult.gitlabUrl, // GitLab web URL
-            gitlabPath: gitlabResult.path,   // Путь в репозитории
-            fileName: gitlabResult.fileName   // Имя файла
+            url: dbx.url,                 // Прямая ссылка Dropbox (?dl=1)
+            dropboxPath: dbx.dropboxPath, // Путь в Dropbox для удаления/управления
+            fileName: dbx.fileName        // Имя файла
           });
           
-          console.log(`Файл ${file.originalname} успешно загружен на GitLab`);
+          console.log(`Файл ${file.originalname} успешно загружен в Dropbox`);
         } catch (uploadError) {
           console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
-          // Продолжаем с другими файлами, но логируем ошибку
           return res.status(500).json({ 
             message: `Ошибка загрузки файла ${file.originalname}: ${uploadError.message}` 
           });
