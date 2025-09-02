@@ -16,10 +16,9 @@ const postSchema = new mongoose.Schema({
     originalName: String,
     mimetype: String,
     size: Number,
-    url: String,        // GitLab URL для скачивания файла
-    gitlabUrl: String,  // URL на GitLab (веб-интерфейс)
-    gitlabPath: String, // Путь к файлу в репозитории
-    fileName: String    // Имя файла в GitLab
+    url: String,         // Прямая ссылка Dropbox (?dl=1)
+    dropboxPath: String, // Путь к файлу в Dropbox для удаления/управления
+    fileName: String     // Имя файла
   }],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
