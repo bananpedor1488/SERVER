@@ -109,7 +109,127 @@ app.options('*', (req, res) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Файлы хранятся в Dropbox, локальное хранение не используется
+// API endpoint для скачивания файлов из Dropbox
+app.get('/api/files/download/:path(*)', async (req, res) => {
+  try {
+    const { readFileFromDropbox } = require('./utils/dropboxUpload');
+    const path = require('path');
+    
+    // Декодируем путь к файлу
+    const filePath = decodeURIComponent(req.params.path);
+    console.log(`Запрос на скачивание файла: ${filePath}`);
+    
+    // Скачиваем файл из Dropbox
+    const fileBuffer = await readFileFromDropbox(filePath);
+    
+    // Определяем MIME тип по расширению файла
+    const ext = path.extname(filePath).toLowerCase();
+    let contentType = 'application/octet-stream'; // по умолчанию
+    
+    switch (ext) {
+      case '.png':
+        contentType = 'image/png';
+        break;
+      case '.jpg':
+      case '.jpeg':
+        contentType = 'image/jpeg';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
+      case '.webp':
+        contentType = 'image/webp';
+        break;
+      case '.svg':
+        contentType = 'image/svg+xml';
+        break;
+      case '.pdf':
+        contentType = 'application/pdf';
+        break;
+      case '.txt':
+        contentType = 'text/plain';
+        break;
+      case '.mp4':
+        contentType = 'video/mp4';
+        break;
+      case '.webm':
+        contentType = 'video/webm';
+        break;
+      case '.ogg':
+        contentType = 'video/ogg';
+        break;
+    }
+    
+    // Устанавливаем заголовки
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': fileBuffer.length,
+      'Cache-Control': 'public, max-age=31536000', // кэш на год
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+    
+    // Отправляем файл
+    res.send(fileBuffer);
+    
+  } catch (error) {
+    console.error('Ошибка скачивания файла:', error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ message: 'File not found' });
+    } else {
+      res.status(500).json({ message: 'Error downloading file' });
+    }
+  }
+});
+
+// API endpoint для получения информации о файле из Dropbox
+app.get('/api/files/info/:path(*)', async (req, res) => {
+  try {
+    const { Dropbox } = require('dropbox');
+    const fetch = require('node-fetch');
+    
+    // Инициализируем Dropbox клиент
+    let dbx;
+    if (process.env.DROPBOX_TOKEN) {
+      dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
+    } else if (process.env.DROPBOX_REFRESH_TOKEN && process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET) {
+      dbx = new Dropbox({ 
+        clientId: process.env.DROPBOX_APP_KEY, 
+        clientSecret: process.env.DROPBOX_APP_SECRET, 
+        refreshToken: process.env.DROPBOX_REFRESH_TOKEN, 
+        fetch 
+      });
+    } else {
+      return res.status(500).json({ message: 'Dropbox not configured' });
+    }
+    
+    // Декодируем путь к файлу
+    const filePath = decodeURIComponent(req.params.path);
+    console.log(`Запрос информации о файле: ${filePath}`);
+    
+    // Получаем метаданные файла
+    const metadata = await dbx.filesGetMetadata({ path: filePath });
+    
+    res.json({
+      name: metadata.result.name,
+      path: metadata.result.path_display,
+      size: metadata.result.size,
+      modified: metadata.result.server_modified,
+      downloadUrl: `https://server-pqqy.onrender.com/api/files/download/${encodeURIComponent(filePath)}`
+    });
+    
+  } catch (error) {
+    console.error('Ошибка получения информации о файле:', error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({ message: 'File not found' });
+    } else {
+      res.status(500).json({ message: 'Error getting file info' });
+    }
+  }
+});
 
 // JWT Middleware для проверки токенов
 const authenticateToken = (req, res, next) => {
