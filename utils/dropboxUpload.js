@@ -33,20 +33,35 @@ async function ensureBaseFolder() {
 }
 
 function toDirectDownloadUrl(sharedUrl) {
-  if (!sharedUrl) return null;
-  if (sharedUrl.includes('?dl=')) return sharedUrl.replace(/\?dl=\d$/, '?dl=1');
-  return sharedUrl + '?dl=1';
+  if (!sharedUrl) {
+    console.log('toDirectDownloadUrl: sharedUrl is null or undefined');
+    return null;
+  }
+  if (sharedUrl.includes('?dl=')) {
+    const directUrl = sharedUrl.replace(/\?dl=\d$/, '?dl=1');
+    console.log('toDirectDownloadUrl: converted existing dl param:', directUrl);
+    return directUrl;
+  }
+  const directUrl = sharedUrl + '?dl=1';
+  console.log('toDirectDownloadUrl: added dl=1 param:', directUrl);
+  return directUrl;
 }
 
 async function getOrCreateSharedLink(path) {
   try {
     const existing = await dbx.sharingListSharedLinks({ path, direct_only: true });
     if (existing.links && existing.links.length > 0) {
-      return toDirectDownloadUrl(existing.links[0].url);
+      const directUrl = toDirectDownloadUrl(existing.links[0].url);
+      console.log(`Found existing shared link for ${path}:`, directUrl);
+      return directUrl;
     }
-  } catch (_) {}
+  } catch (error) {
+    console.log(`No existing shared link for ${path}:`, error.message);
+  }
   const created = await dbx.sharingCreateSharedLinkWithSettings({ path });
-  return toDirectDownloadUrl(created.url);
+  const directUrl = toDirectDownloadUrl(created.url);
+  console.log(`Created new shared link for ${path}:`, directUrl);
+  return directUrl;
 }
 
 async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
@@ -66,6 +81,11 @@ async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
   });
 
   const directUrl = await getOrCreateSharedLink(dropboxPath);
+
+  if (!directUrl) {
+    console.error(`Failed to create shared link for ${dropboxPath}`);
+    throw new Error(`Failed to create shared link for file ${fileName}`);
+  }
 
   return {
     url: directUrl,

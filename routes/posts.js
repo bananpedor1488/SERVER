@@ -170,7 +170,11 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
             fileName: dbx.fileName        // Имя файла
           });
           
-          console.log(`Файл ${file.originalname} успешно загружен в Dropbox`);
+          console.log(`Файл ${file.originalname} успешно загружен в Dropbox:`, {
+            url: dbx.url,
+            dropboxPath: dbx.dropboxPath,
+            fileName: dbx.fileName
+          });
         } catch (uploadError) {
           console.error(`Ошибка загрузки файла ${file.originalname}:`, uploadError);
           return res.status(500).json({ 
