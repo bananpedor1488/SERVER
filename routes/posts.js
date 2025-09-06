@@ -246,6 +246,29 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     // Добавляем данные для интерактивных элементов
     if (req.body.postType === 'giveaway' && req.body.giveawayData) {
       const giveawayData = JSON.parse(req.body.giveawayData);
+      
+      // Если розыгрыш с баллами, списываем их с баланса пользователя
+      if (giveawayData.prizeType === 'points' && giveawayData.prizeAmount > 0) {
+        const User = require('../models/User');
+        const user = await User.findById(req.session.user.id);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'Пользователь не найден' });
+        }
+        
+        if (user.balance < giveawayData.prizeAmount) {
+          return res.status(400).json({ 
+            message: `Недостаточно баллов. У вас ${user.balance} баллов, требуется ${giveawayData.prizeAmount}` 
+          });
+        }
+        
+        // Списываем баллы
+        user.balance -= giveawayData.prizeAmount;
+        await user.save();
+        
+        console.log(`Списано ${giveawayData.prizeAmount} баллов с баланса пользователя ${user.username}. Остаток: ${user.balance}`);
+      }
+      
       postData.giveawayData = {
         prize: giveawayData.prize,
         prizeType: giveawayData.prizeType || 'text',
@@ -300,7 +323,23 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     io.to('posts').emit('newPost', postWithComments);
 
     console.log('Пост успешно создан и отправлен клиентам');
-    res.status(201).json(postWithComments);
+    
+    // Если это розыгрыш с баллами, возвращаем обновленный баланс
+    if (req.body.postType === 'giveaway' && req.body.giveawayData) {
+      const giveawayData = JSON.parse(req.body.giveawayData);
+      if (giveawayData.prizeType === 'points') {
+        const User = require('../models/User');
+        const user = await User.findById(req.session.user.id);
+        res.status(201).json({
+          ...postWithComments,
+          userBalance: user.balance
+        });
+      } else {
+        res.status(201).json(postWithComments);
+      }
+    } else {
+      res.status(201).json(postWithComments);
+    }
   } catch (error) {
     console.error('Error creating post:', error);
     console.error('Error details:', {

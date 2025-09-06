@@ -43,7 +43,7 @@ const postSchema = new mongoose.Schema({
     prize: String,
     prizeType: {
       type: String,
-      enum: ['text', 'balance', 'premium'],
+      enum: ['text', 'points', 'premium'],
       default: 'text'
     },
     prizeAmount: {
