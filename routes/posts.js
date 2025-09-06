@@ -231,11 +231,53 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     }
 
     console.log('Создаем пост в базе данных...');
-    const post = await Post.create({
+    
+    // Подготавливаем данные поста
+    const postData = {
       author: req.session.user.id,
       content: content || '',
-      files: files
-    });
+      files: files,
+      postType: req.body.postType || 'text'
+    };
+
+    // Добавляем данные для интерактивных элементов
+    if (req.body.postType === 'giveaway' && req.body.giveawayData) {
+      const giveawayData = JSON.parse(req.body.giveawayData);
+      postData.giveawayData = {
+        prize: giveawayData.prize,
+        description: giveawayData.description,
+        endDate: giveawayData.endDate ? new Date(giveawayData.endDate) : null,
+        participants: [],
+        pointsRequired: giveawayData.pointsRequired || 0,
+        isCompleted: false
+      };
+    }
+
+    if (req.body.postType === 'poll' && req.body.pollData) {
+      const pollData = JSON.parse(req.body.pollData);
+      postData.pollData = {
+        question: pollData.question,
+        options: pollData.options.filter(opt => opt.trim()),
+        allowMultiple: pollData.allowMultiple || false,
+        endDate: pollData.endDate ? new Date(pollData.endDate) : null,
+        votes: new Map(),
+        isActive: true
+      };
+    }
+
+    if (req.body.postType === 'quiz' && req.body.quizData) {
+      const quizData = JSON.parse(req.body.quizData);
+      postData.quizData = {
+        question: quizData.question,
+        options: quizData.options.filter(opt => opt.trim()),
+        correctAnswer: quizData.correctAnswer || 0,
+        explanation: quizData.explanation || '',
+        attempts: new Map(),
+        isActive: true
+      };
+    }
+
+    const post = await Post.create(postData);
 
     console.log('Пост создан с ID:', post._id);
     const populated = await post.populate('author', 'username displayName avatar premium');
@@ -556,6 +598,292 @@ router.delete('/:postId/comment/:commentId', isAuth, async (req, res) => {
   } catch (error) {
     console.error('Error deleting comment:', error);
     res.status(500).json({ message: 'Error deleting comment' });
+  }
+});
+
+// ===== МАРШРУТЫ ДЛЯ ИНТЕРАКТИВНЫХ ЭЛЕМЕНТОВ =====
+
+// Участие в розыгрыше
+router.post('/:id/join-giveaway', isAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Пост не найден' });
+    
+    if (post.postType !== 'giveaway') {
+      return res.status(400).json({ message: 'Этот пост не является розыгрышем' });
+    }
+
+    const userId = req.session.user.id;
+    
+    // Проверяем, не участвует ли уже пользователь
+    if (post.giveawayData.participants.includes(userId)) {
+      return res.status(400).json({ message: 'Вы уже участвуете в этом розыгрыше' });
+    }
+
+    // Проверяем, не завершен ли розыгрыш
+    if (post.giveawayData.isCompleted) {
+      return res.status(400).json({ message: 'Розыгрыш уже завершен' });
+    }
+
+    // Проверяем, не истек ли срок
+    if (post.giveawayData.endDate && new Date() > post.giveawayData.endDate) {
+      return res.status(400).json({ message: 'Срок участия в розыгрыше истек' });
+    }
+
+    // Проверяем баллы, если требуется
+    if (post.giveawayData.pointsRequired > 0) {
+      const user = await User.findById(userId);
+      if (!user || user.points < post.giveawayData.pointsRequired) {
+        return res.status(400).json({ 
+          message: `Недостаточно баллов. Требуется: ${post.giveawayData.pointsRequired}` 
+        });
+      }
+      
+      // Списываем баллы
+      user.points -= post.giveawayData.pointsRequired;
+      await user.save();
+    }
+
+    // Добавляем участника
+    post.giveawayData.participants.push(userId);
+    await post.save();
+
+    // Отправляем real-time обновление
+    const io = req.app.get('io');
+    io.to('posts').emit('giveawayUpdate', {
+      postId: post._id.toString(),
+      participantsCount: post.giveawayData.participants.length
+    });
+
+    res.json({ 
+      message: 'Вы успешно присоединились к розыгрышу',
+      participantsCount: post.giveawayData.participants.length
+    });
+  } catch (error) {
+    console.error('Error joining giveaway:', error);
+    res.status(500).json({ message: 'Ошибка при участии в розыгрыше' });
+  }
+});
+
+// Завершить розыгрыш и выбрать победителя
+router.post('/:id/complete-giveaway', isAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Пост не найден' });
+    
+    if (post.postType !== 'giveaway') {
+      return res.status(400).json({ message: 'Этот пост не является розыгрышем' });
+    }
+
+    // Проверяем, что пользователь - автор поста
+    if (post.author.toString() !== req.session.user.id) {
+      return res.status(403).json({ message: 'Только автор может завершить розыгрыш' });
+    }
+
+    if (post.giveawayData.isCompleted) {
+      return res.status(400).json({ message: 'Розыгрыш уже завершен' });
+    }
+
+    if (post.giveawayData.participants.length === 0) {
+      return res.status(400).json({ message: 'Нет участников для розыгрыша' });
+    }
+
+    // Выбираем случайного победителя
+    const randomIndex = Math.floor(Math.random() * post.giveawayData.participants.length);
+    const winnerId = post.giveawayData.participants[randomIndex];
+    
+    post.giveawayData.winner = winnerId;
+    post.giveawayData.isCompleted = true;
+    await post.save();
+
+    // Получаем информацию о победителе
+    const winner = await User.findById(winnerId).select('username displayName');
+
+    // Отправляем real-time обновление
+    const io = req.app.get('io');
+    io.to('posts').emit('giveawayCompleted', {
+      postId: post._id.toString(),
+      winner: winner,
+      participantsCount: post.giveawayData.participants.length
+    });
+
+    res.json({ 
+      message: 'Розыгрыш завершен',
+      winner: winner,
+      participantsCount: post.giveawayData.participants.length
+    });
+  } catch (error) {
+    console.error('Error completing giveaway:', error);
+    res.status(500).json({ message: 'Ошибка при завершении розыгрыша' });
+  }
+});
+
+// Голосование в опросе
+router.post('/:id/vote-poll', isAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Пост не найден' });
+    
+    if (post.postType !== 'poll') {
+      return res.status(400).json({ message: 'Этот пост не является опросом' });
+    }
+
+    const userId = req.session.user.id;
+    const { optionIndex } = req.body;
+
+    if (optionIndex < 0 || optionIndex >= post.pollData.options.length) {
+      return res.status(400).json({ message: 'Неверный вариант ответа' });
+    }
+
+    // Проверяем, не истек ли срок
+    if (post.pollData.endDate && new Date() > post.pollData.endDate) {
+      return res.status(400).json({ message: 'Срок голосования истек' });
+    }
+
+    if (!post.pollData.isActive) {
+      return res.status(400).json({ message: 'Опрос неактивен' });
+    }
+
+    // Получаем текущие голоса пользователя
+    const userVotes = post.pollData.votes.get(userId.toString()) || [];
+
+    if (!post.pollData.allowMultiple) {
+      // Одиночный выбор - заменяем предыдущий голос
+      post.pollData.votes.set(userId.toString(), [optionIndex]);
+    } else {
+      // Множественный выбор - добавляем/удаляем голос
+      if (userVotes.includes(optionIndex)) {
+        userVotes.splice(userVotes.indexOf(optionIndex), 1);
+      } else {
+        userVotes.push(optionIndex);
+      }
+      post.pollData.votes.set(userId.toString(), userVotes);
+    }
+
+    await post.save();
+
+    // Отправляем real-time обновление
+    const io = req.app.get('io');
+    io.to('posts').emit('pollUpdate', {
+      postId: post._id.toString(),
+      votes: Object.fromEntries(post.pollData.votes)
+    });
+
+    res.json({ 
+      message: 'Голос засчитан',
+      userVotes: userVotes
+    });
+  } catch (error) {
+    console.error('Error voting in poll:', error);
+    res.status(500).json({ message: 'Ошибка при голосовании' });
+  }
+});
+
+// Ответ на квиз
+router.post('/:id/answer-quiz', isAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Пост не найден' });
+    
+    if (post.postType !== 'quiz') {
+      return res.status(400).json({ message: 'Этот пост не является квизом' });
+    }
+
+    const userId = req.session.user.id;
+    const { answerIndex } = req.body;
+
+    if (answerIndex < 0 || answerIndex >= post.quizData.options.length) {
+      return res.status(400).json({ message: 'Неверный вариант ответа' });
+    }
+
+    if (!post.quizData.isActive) {
+      return res.status(400).json({ message: 'Квиз неактивен' });
+    }
+
+    // Проверяем, не отвечал ли уже пользователь
+    if (post.quizData.attempts.has(userId.toString())) {
+      return res.status(400).json({ message: 'Вы уже отвечали на этот квиз' });
+    }
+
+    // Сохраняем ответ
+    post.quizData.attempts.set(userId.toString(), answerIndex);
+    await post.save();
+
+    // Проверяем правильность ответа
+    const isCorrect = answerIndex === post.quizData.correctAnswer;
+    const explanation = post.quizData.explanation || '';
+
+    // Отправляем real-time обновление
+    const io = req.app.get('io');
+    io.to('posts').emit('quizAnswer', {
+      postId: post._id.toString(),
+      userId: userId,
+      answerIndex: answerIndex,
+      isCorrect: isCorrect
+    });
+
+    res.json({ 
+      correct: isCorrect,
+      explanation: explanation,
+      correctAnswer: post.quizData.correctAnswer
+    });
+  } catch (error) {
+    console.error('Error answering quiz:', error);
+    res.status(500).json({ message: 'Ошибка при ответе на квиз' });
+  }
+});
+
+// Добавить реакцию
+router.post('/:id/reaction', isAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Пост не найден' });
+
+    const userId = req.session.user.id;
+    const { reactionType } = req.body;
+
+    const validReactions = ['laugh', 'love', 'wow', 'sad', 'angry'];
+    if (!validReactions.includes(reactionType)) {
+      return res.status(400).json({ message: 'Неверный тип реакции' });
+    }
+
+    // Инициализируем Map если не существует
+    if (!post.reactions) {
+      post.reactions = new Map();
+    }
+
+    // Получаем текущие реакции пользователя для этого типа
+    const userReactions = post.reactions.get(reactionType) || [];
+    
+    if (userReactions.includes(userId)) {
+      // Убираем реакцию
+      const index = userReactions.indexOf(userId);
+      userReactions.splice(index, 1);
+    } else {
+      // Добавляем реакцию
+      userReactions.push(userId);
+    }
+
+    post.reactions.set(reactionType, userReactions);
+    await post.save();
+
+    // Отправляем real-time обновление
+    const io = req.app.get('io');
+    io.to('posts').emit('reactionUpdate', {
+      postId: post._id.toString(),
+      reactionType: reactionType,
+      count: userReactions.length,
+      userId: userId
+    });
+
+    res.json({ 
+      reactionType: reactionType,
+      count: userReactions.length,
+      hasReacted: userReactions.includes(userId)
+    });
+  } catch (error) {
+    console.error('Error updating reaction:', error);
+    res.status(500).json({ message: 'Ошибка при обновлении реакции' });
   }
 });
 

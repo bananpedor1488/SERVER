@@ -33,6 +33,75 @@ const postSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Новые поля для интерактивных элементов
+  postType: {
+    type: String,
+    enum: ['text', 'giveaway', 'poll', 'quiz'],
+    default: 'text'
+  },
+  giveawayData: {
+    prize: String,
+    description: String,
+    endDate: Date,
+    participants: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+    pointsRequired: {
+      type: Number,
+      default: 0
+    },
+    winner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    isCompleted: {
+      type: Boolean,
+      default: false
+    }
+  },
+  pollData: {
+    question: String,
+    options: [String],
+    allowMultiple: {
+      type: Boolean,
+      default: false
+    },
+    endDate: Date,
+    votes: {
+      type: Map,
+      of: [Number] // Массив индексов выбранных вариантов
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  },
+  quizData: {
+    question: String,
+    options: [String],
+    correctAnswer: {
+      type: Number,
+      min: 0,
+      max: 3
+    },
+    explanation: String,
+    attempts: {
+      type: Map,
+      of: Number // Индекс выбранного ответа
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  },
+  reactions: {
+    type: Map,
+    of: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }]
+  },
   createdAt: {
     type: Date,
     default: Date.now
