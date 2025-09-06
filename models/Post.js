@@ -41,16 +41,21 @@ const postSchema = new mongoose.Schema({
   },
   giveawayData: {
     prize: String,
+    prizeType: {
+      type: String,
+      enum: ['text', 'balance', 'premium'],
+      default: 'text'
+    },
+    prizeAmount: {
+      type: Number,
+      default: 0
+    },
     description: String,
     endDate: Date,
     participants: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }],
-    pointsRequired: {
-      type: Number,
-      default: 0
-    },
     winner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'

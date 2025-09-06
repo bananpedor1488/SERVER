@@ -245,10 +245,11 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       const giveawayData = JSON.parse(req.body.giveawayData);
       postData.giveawayData = {
         prize: giveawayData.prize,
+        prizeType: giveawayData.prizeType || 'text',
+        prizeAmount: giveawayData.prizeAmount || 0,
         description: giveawayData.description,
         endDate: giveawayData.endDate ? new Date(giveawayData.endDate) : null,
         participants: [],
-        pointsRequired: giveawayData.pointsRequired || 0,
         isCompleted: false
       };
     }
@@ -630,19 +631,6 @@ router.post('/:id/join-giveaway', isAuth, async (req, res) => {
       return res.status(400).json({ message: 'Срок участия в розыгрыше истек' });
     }
 
-    // Проверяем баллы, если требуется
-    if (post.giveawayData.pointsRequired > 0) {
-      const user = await User.findById(userId);
-      if (!user || user.points < post.giveawayData.pointsRequired) {
-        return res.status(400).json({ 
-          message: `Недостаточно баллов. Требуется: ${post.giveawayData.pointsRequired}` 
-        });
-      }
-      
-      // Списываем баллы
-      user.points -= post.giveawayData.pointsRequired;
-      await user.save();
-    }
 
     // Добавляем участника
     post.giveawayData.participants.push(userId);
