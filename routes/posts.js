@@ -160,8 +160,11 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     // Dropbox больше не используется
     
     const content = req.body.content?.trim();
-    if (!content && (!req.files || req.files.length === 0)) {
-      console.log('Ошибка: Нет контента и файлов');
+    const postType = req.body.postType || 'text';
+    
+    // Для розыгрышей и опросов разрешаем пустой контент, так как вся информация в виджетах
+    if (!content && (!req.files || req.files.length === 0) && postType === 'text') {
+      console.log('Ошибка: Нет контента и файлов для текстового поста');
       return res.status(400).json({ message: 'Content or files required' });
     }
 
