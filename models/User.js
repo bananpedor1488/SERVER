@@ -54,4 +54,12 @@ const UserSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
+// Middleware для логирования операций с датами
+UserSchema.pre('save', function(next) {
+  if (this.isModified('lastSeen') || this.isModified('premiumExpiresAt') || this.isModified('emailVerificationExpires')) {
+    console.log(`[USER TIME] User ${this.username} - lastSeen: ${this.lastSeen}, premiumExpiresAt: ${this.premiumExpiresAt}, emailVerificationExpires: ${this.emailVerificationExpires}`);
+  }
+  next();
+});
+
 module.exports = mongoose.model('User', UserSchema);

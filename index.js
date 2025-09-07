@@ -39,9 +39,16 @@ app.set('io', io);
 
 // Улучшенное логирование
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path} from ${req.ip}`);
   console.log('Origin:', req.get('Origin'));
   console.log('Authorization header:', req.get('Authorization') ? 'Present' : 'Missing');
+  
+  // Специальное логирование для запросов времени
+  if (req.path === '/api/time') {
+    console.log(`[TIME REQUEST] Client requesting server time at ${timestamp}`);
+  }
+  
   next();
 });
 
@@ -517,6 +524,18 @@ app.get('/api/health', async (req, res) => {
       message: error.message
     });
   }
+});
+
+// Эндпоинт для синхронизации времени
+app.get('/api/time', (req, res) => {
+  const serverTime = new Date();
+  console.log(`[TIME SYNC] Request from ${req.ip} at ${serverTime.toISOString()}`);
+  
+  res.json({
+    timestamp: serverTime.toISOString(),
+    unix: serverTime.getTime(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
 });
 
 // Роут для выхода (очистка токенов на клиенте)

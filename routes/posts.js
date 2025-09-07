@@ -157,6 +157,8 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     console.log('Пользователь:', req.session.user.id);
     console.log('Контент:', req.body.content);
     console.log('Файлы:', req.files ? req.files.length : 0);
+    console.log('Время создания:', new Date().toISOString());
+    console.log('Тип поста:', postType);
     // Dropbox больше не используется
     
     const content = req.body.content?.trim();
@@ -649,6 +651,11 @@ router.delete('/:postId/comment/:commentId', isAuth, async (req, res) => {
 // Участие в розыгрыше
 router.post('/:id/join-giveaway', isAuth, async (req, res) => {
   try {
+    console.log('=== Участие в розыгрыше ===');
+    console.log('Пост ID:', req.params.id);
+    console.log('Пользователь:', req.session.user.id);
+    console.log('Время участия:', new Date().toISOString());
+    
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: 'Пост не найден' });
     
@@ -751,6 +758,12 @@ router.post('/:id/complete-giveaway', isAuth, async (req, res) => {
 // Голосование в опросе
 router.post('/:id/vote-poll', isAuth, async (req, res) => {
   try {
+    console.log('=== Голосование в опросе ===');
+    console.log('Пост ID:', req.params.id);
+    console.log('Пользователь:', req.session.user.id);
+    console.log('Вариант:', req.body.optionIndex);
+    console.log('Время голосования:', new Date().toISOString());
+    
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ message: 'Пост не найден' });
     

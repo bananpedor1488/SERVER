@@ -134,4 +134,12 @@ postSchema.virtual('commentsCount', {
 postSchema.set('toJSON', { virtuals: true });
 postSchema.set('toObject', { virtuals: true });
 
+// Middleware для логирования операций с датами
+postSchema.pre('save', function(next) {
+  if (this.isModified('giveawayData.endDate') || this.isModified('pollData.endDate') || this.isModified('quizData.endDate')) {
+    console.log(`[POST TIME] Post ${this._id} - giveawayEndDate: ${this.giveawayData?.endDate}, pollEndDate: ${this.pollData?.endDate}, quizEndDate: ${this.quizData?.endDate}`);
+  }
+  next();
+});
+
 module.exports = mongoose.model('Post', postSchema);
