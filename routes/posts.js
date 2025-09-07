@@ -158,11 +158,11 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     console.log('Контент:', req.body.content);
     console.log('Файлы:', req.files ? req.files.length : 0);
     console.log('Время создания:', new Date().toISOString());
-    console.log('Тип поста:', postType);
-    // Dropbox больше не используется
     
     const content = req.body.content?.trim();
     const postType = req.body.postType || 'text';
+    console.log('Тип поста:', postType);
+    // Dropbox больше не используется
     
     // Для розыгрышей и опросов разрешаем пустой контент, так как вся информация в виджетах
     if (!content && (!req.files || req.files.length === 0) && postType === 'text') {
