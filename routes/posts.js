@@ -287,6 +287,10 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
         participants: [],
         isCompleted: false
       };
+      
+      console.log('Giveaway endDate received:', giveawayData.endDate);
+      console.log('Giveaway endDate parsed:', postData.giveawayData.endDate);
+      console.log('Giveaway endDate ISO:', postData.giveawayData.endDate?.toISOString());
     }
 
     if (req.body.postType === 'poll' && req.body.pollData) {
