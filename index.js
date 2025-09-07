@@ -723,6 +723,8 @@ const checkExpiredGiveaways = async () => {
     const User = require('./models/User');
     
     const now = new Date();
+    console.log(`[GIVEAWAY AUTO] Проверка истекших розыгрышей. Текущее время сервера: ${now.toISOString()}`);
+    
     const expiredGiveaways = await Post.find({
       postType: 'giveaway',
       'giveawayData.endDate': { $lte: now },
@@ -732,6 +734,11 @@ const checkExpiredGiveaways = async () => {
     console.log(`[GIVEAWAY AUTO] Найдено ${expiredGiveaways.length} истекших розыгрышей`);
     
     for (const post of expiredGiveaways) {
+      console.log(`[GIVEAWAY AUTO] Обработка розыгрыша ${post._id}:`);
+      console.log(`  - Дата окончания: ${post.giveawayData.endDate?.toISOString()}`);
+      console.log(`  - Текущее время: ${now.toISOString()}`);
+      console.log(`  - Участников: ${post.giveawayData.participants.length}`);
+      
       if (post.giveawayData.participants.length > 0) {
         // Выбираем случайного победителя
         const randomIndex = Math.floor(Math.random() * post.giveawayData.participants.length);
@@ -778,8 +785,8 @@ const checkExpiredGiveaways = async () => {
   }
 };
 
-// Запускаем проверку каждые 5 минут
-setInterval(checkExpiredGiveaways, 5 * 60 * 1000);
+// Запускаем проверку каждую минуту (для тестирования)
+setInterval(checkExpiredGiveaways, 1 * 60 * 1000);
 
 // Запускаем проверку сразу при старте сервера
 checkExpiredGiveaways();
