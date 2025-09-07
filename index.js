@@ -785,8 +785,8 @@ const checkExpiredGiveaways = async () => {
   }
 };
 
-// Запускаем проверку каждую минуту (для тестирования)
-setInterval(checkExpiredGiveaways, 1 * 60 * 1000);
+// Запускаем проверку каждые 10 секунд (для тестирования)
+setInterval(checkExpiredGiveaways, 10 * 1000);
 
 // Запускаем проверку сразу при старте сервера
 checkExpiredGiveaways();
