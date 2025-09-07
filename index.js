@@ -716,6 +716,74 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Запуск сервера с Socket.IO0
+// Автоматическое завершение истекших розыгрышей
+const checkExpiredGiveaways = async () => {
+  try {
+    const Post = require('./models/Post');
+    const User = require('./models/User');
+    
+    const now = new Date();
+    const expiredGiveaways = await Post.find({
+      postType: 'giveaway',
+      'giveawayData.endDate': { $lte: now },
+      'giveawayData.isCompleted': false
+    });
+    
+    console.log(`[GIVEAWAY AUTO] Найдено ${expiredGiveaways.length} истекших розыгрышей`);
+    
+    for (const post of expiredGiveaways) {
+      if (post.giveawayData.participants.length > 0) {
+        // Выбираем случайного победителя
+        const randomIndex = Math.floor(Math.random() * post.giveawayData.participants.length);
+        const winnerId = post.giveawayData.participants[randomIndex];
+        
+        post.giveawayData.winner = winnerId;
+        post.giveawayData.isCompleted = true;
+        await post.save();
+        
+        // Если розыгрыш с баллами, начисляем их победителю
+        if (post.giveawayData.prizeType === 'points' && post.giveawayData.prizeAmount > 0) {
+          const winner = await User.findById(winnerId);
+          if (winner) {
+            winner.points += post.giveawayData.prizeAmount;
+            await winner.save();
+            console.log(`[GIVEAWAY AUTO] Начислено ${post.giveawayData.prizeAmount} баллов победителю ${winner.username}`);
+          }
+        }
+        
+        // Если розыгрыш с премиумом, активируем его
+        if (post.giveawayData.prizeType === 'premium' && post.giveawayData.prizeAmount > 0) {
+          const winner = await User.findById(winnerId);
+          if (winner) {
+            const premiumExpiresAt = new Date();
+            premiumExpiresAt.setDate(premiumExpiresAt.getDate() + post.giveawayData.prizeAmount);
+            
+            winner.premium = true;
+            winner.premiumExpiresAt = premiumExpiresAt;
+            await winner.save();
+            console.log(`[GIVEAWAY AUTO] Активирован премиум на ${post.giveawayData.prizeAmount} дней для ${winner.username}`);
+          }
+        }
+        
+        console.log(`[GIVEAWAY AUTO] Розыгрыш ${post._id} автоматически завершен. Победитель: ${winnerId}`);
+      } else {
+        // Если нет участников, просто помечаем как завершенный
+        post.giveawayData.isCompleted = true;
+        await post.save();
+        console.log(`[GIVEAWAY AUTO] Розыгрыш ${post._id} завершен без участников`);
+      }
+    }
+  } catch (error) {
+    console.error('[GIVEAWAY AUTO] Ошибка при проверке истекших розыгрышей:', error);
+  }
+};
+
+// Запускаем проверку каждые 5 минут
+setInterval(checkExpiredGiveaways, 5 * 60 * 1000);
+
+// Запускаем проверку сразу при старте сервера
+checkExpiredGiveaways();
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);

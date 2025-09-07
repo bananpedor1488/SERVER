@@ -265,17 +265,17 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
           return res.status(404).json({ message: 'Пользователь не найден' });
         }
         
-        if (user.balance < giveawayData.prizeAmount) {
+        if (user.points < giveawayData.prizeAmount) {
           return res.status(400).json({ 
-            message: `Недостаточно баллов. У вас ${user.balance} баллов, требуется ${giveawayData.prizeAmount}` 
+            message: `Недостаточно баллов. У вас ${user.points} баллов, требуется ${giveawayData.prizeAmount}` 
           });
         }
         
         // Списываем баллы
-        user.balance -= giveawayData.prizeAmount;
+        user.points -= giveawayData.prizeAmount;
         await user.save();
         
-        console.log(`Списано ${giveawayData.prizeAmount} баллов с баланса пользователя ${user.username}. Остаток: ${user.balance}`);
+        console.log(`Списано ${giveawayData.prizeAmount} баллов с баланса пользователя ${user.username}. Остаток: ${user.points}`);
       }
       
       postData.giveawayData = {
@@ -341,7 +341,7 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
         const user = await User.findById(req.session.user.id);
         res.status(201).json({
           ...postWithComments,
-          userBalance: user.balance
+          userBalance: user.points
         });
       } else {
         res.status(201).json(postWithComments);
