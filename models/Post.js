@@ -8,9 +8,7 @@ const postSchema = new mongoose.Schema({
   },
   content: {
     type: String,
-    required: function() {
-      return !this.files || this.files.length === 0;
-    },
+    required: false, // Сделаем поле необязательным
     maxlength: 280
   },
   files: [{

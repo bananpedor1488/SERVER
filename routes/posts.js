@@ -245,6 +245,13 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
       postType: req.body.postType || 'text'
     };
 
+    console.log('PostData перед созданием:', {
+      author: postData.author,
+      content: postData.content,
+      postType: postData.postType,
+      filesCount: postData.files?.length || 0
+    });
+
     // Добавляем данные для интерактивных элементов
     if (req.body.postType === 'giveaway' && req.body.giveawayData) {
       const giveawayData = JSON.parse(req.body.giveawayData);
