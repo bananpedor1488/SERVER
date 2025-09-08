@@ -36,7 +36,7 @@ router.get('/', isAuth, async (req, res) => {
     // Получаем обычные посты
     const posts = await Post.find()
       .sort({ createdAt: -1 })
-      .populate('author', 'username displayName avatar premium')
+      .populate('author', 'username displayName avatar premium role')
       .populate('giveawayData.winner', 'username displayName avatar')
       .lean();
 
@@ -106,7 +106,7 @@ router.get('/', isAuth, async (req, res) => {
     // Получаем комментарии для всех постов одним запросом
     const comments = await Comment.find({ post: { $in: postIds } })
       .sort({ createdAt: 1 })
-      .populate('author', 'username displayName avatar premium')
+      .populate('author', 'username displayName avatar premium role')
       .lean();
 
     // Группируем комментарии по постам
@@ -555,7 +555,7 @@ router.get('/:id/comments', isAuth, async (req, res) => {
   try {
     const comments = await Comment.find({ post: req.params.id })
       .sort({ createdAt: 1 })
-      .populate('author', 'username displayName avatar premium');
+      .populate('author', 'username displayName avatar premium role');
 
     res.json(comments);
   } catch (error) {
@@ -767,7 +767,7 @@ router.post('/:id/complete-giveaway', isAuth, async (req, res) => {
 
     // Получаем обновленный пост с популированным winner
     const updatedPost = await Post.findById(post._id)
-      .populate('author', 'username displayName avatar premium')
+      .populate('author', 'username displayName avatar premium role')
       .populate('giveawayData.winner', 'username displayName avatar')
       .lean();
 

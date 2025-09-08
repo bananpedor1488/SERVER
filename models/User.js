@@ -20,6 +20,15 @@ const UserSchema = new mongoose.Schema({
   // Система баллов
   points: { type: Number, default: 0 }, // Начальный баланс 0 баллов
   
+  // Система ролей
+  role: { type: String, enum: ['user', 'admin'], default: 'user' }, // Роль пользователя
+  
+  // Система банов
+  banned: { type: Boolean, default: false }, // Статус бана
+  banReason: { type: String }, // Причина бана
+  bannedAt: { type: Date }, // Дата бана
+  bannedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Кто забанил
+  
   // Премиум система
   premium: { type: Boolean, default: false }, // Премиум статус
   premiumExpiresAt: { type: Date }, // Дата окончания премиума

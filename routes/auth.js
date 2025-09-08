@@ -11,7 +11,8 @@ const generateTokens = (user) => {
   const payload = {
     id: user._id.toString(),
     username: user.username,
-    email: user.email
+    email: user.email,
+    role: user.role || 'user'
   };
 
   const accessToken = jwt.sign(
@@ -374,7 +375,8 @@ router.post('/login', async (req, res) => {
         avatar: user.avatar,
         emailVerified: user.emailVerified,
         lastLogin: user.lastLogin,
-        lastLoginIP: user.lastLoginIP
+        lastLoginIP: user.lastLoginIP,
+        role: user.role || 'user'
       }
     });
     
