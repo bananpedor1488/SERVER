@@ -37,6 +37,7 @@ router.get('/', isAuth, async (req, res) => {
     const posts = await Post.find()
       .sort({ createdAt: -1 })
       .populate('author', 'username displayName avatar premium')
+      .populate('giveawayData.winner', 'username displayName avatar')
       .lean();
 
     // Получаем репосты
@@ -45,10 +46,16 @@ router.get('/', isAuth, async (req, res) => {
       .populate('repostedBy', 'username displayName avatar premium')
       .populate({
         path: 'originalPost',
-        populate: {
-          path: 'author',
-          select: 'username displayName avatar premium'
-        }
+        populate: [
+          {
+            path: 'author',
+            select: 'username displayName avatar premium'
+          },
+          {
+            path: 'giveawayData.winner',
+            select: 'username displayName avatar'
+          }
+        ]
       })
       .lean();
 
@@ -256,8 +263,8 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
     if (req.body.postType === 'giveaway' && req.body.giveawayData) {
       const giveawayData = JSON.parse(req.body.giveawayData);
       
-      // Если розыгрыш с баллами, списываем их с баланса пользователя
-      if (giveawayData.prizeType === 'points' && giveawayData.prizeAmount > 0) {
+      // Если розыгрыш с баллами или премиумом, списываем их с баланса пользователя
+      if ((giveawayData.prizeType === 'points' || giveawayData.prizeType === 'premium') && giveawayData.prizeAmount > 0) {
         const User = require('../models/User');
         const user = await User.findById(req.session.user.id);
         
@@ -265,17 +272,28 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
           return res.status(404).json({ message: 'Пользователь не найден' });
         }
         
-        if (user.points < giveawayData.prizeAmount) {
+        let cost = 0;
+        if (giveawayData.prizeType === 'points') {
+          cost = giveawayData.prizeAmount;
+        } else if (giveawayData.prizeType === 'premium') {
+          // Стоимость премиума: 30дн-300, 60дн-600, 90дн-900
+          const premiumCosts = { 30: 300, 60: 600, 90: 900 };
+          cost = premiumCosts[giveawayData.prizeAmount] || 0;
+        }
+        
+        if (cost > 0 && user.points < cost) {
           return res.status(400).json({ 
-            message: `Недостаточно баллов. У вас ${user.points} баллов, требуется ${giveawayData.prizeAmount}` 
+            message: `Недостаточно баллов. У вас ${user.points} баллов, требуется ${cost}` 
           });
         }
         
         // Списываем баллы
-        user.points -= giveawayData.prizeAmount;
-        await user.save();
-        
-        console.log(`Списано ${giveawayData.prizeAmount} баллов с баланса пользователя ${user.username}. Остаток: ${user.points}`);
+        if (cost > 0) {
+          user.points -= cost;
+          await user.save();
+          
+          console.log(`Списано ${cost} баллов с баланса пользователя ${user.username}. Остаток: ${user.points}`);
+        }
       }
       
       postData.giveawayData = {
@@ -337,10 +355,10 @@ router.post('/', isAuth, uploadFiles, handleUploadError, async (req, res) => {
 
     console.log('Пост успешно создан и отправлен клиентам');
     
-    // Если это розыгрыш с баллами, возвращаем обновленный баланс
+    // Если это розыгрыш с баллами или премиумом, возвращаем обновленный баланс
     if (req.body.postType === 'giveaway' && req.body.giveawayData) {
       const giveawayData = JSON.parse(req.body.giveawayData);
-      if (giveawayData.prizeType === 'points') {
+      if (giveawayData.prizeType === 'points' || giveawayData.prizeType === 'premium') {
         const User = require('../models/User');
         const user = await User.findById(req.session.user.id);
         res.status(201).json({
@@ -747,12 +765,19 @@ router.post('/:id/complete-giveaway', isAuth, async (req, res) => {
     // Получаем информацию о победителе
     const winner = await User.findById(winnerId).select('username displayName');
 
+    // Получаем обновленный пост с популированным winner
+    const updatedPost = await Post.findById(post._id)
+      .populate('author', 'username displayName avatar premium')
+      .populate('giveawayData.winner', 'username displayName avatar')
+      .lean();
+
     // Отправляем real-time обновление
     const io = req.app.get('io');
     io.to('posts').emit('giveawayCompleted', {
       postId: post._id.toString(),
       winner: winner,
-      participantsCount: post.giveawayData.participants.length
+      participantsCount: post.giveawayData.participants.length,
+      updatedPost: updatedPost
     });
 
     res.json({ 

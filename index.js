@@ -748,9 +748,11 @@ const checkExpiredGiveaways = async () => {
         post.giveawayData.isCompleted = true;
         await post.save();
         
+        // Получаем информацию о победителе
+        const winner = await User.findById(winnerId).select('username displayName');
+        
         // Если розыгрыш с баллами, начисляем их победителю
         if (post.giveawayData.prizeType === 'points' && post.giveawayData.prizeAmount > 0) {
-          const winner = await User.findById(winnerId);
           if (winner) {
             winner.points += post.giveawayData.prizeAmount;
             await winner.save();
@@ -760,7 +762,6 @@ const checkExpiredGiveaways = async () => {
         
         // Если розыгрыш с премиумом, активируем его
         if (post.giveawayData.prizeType === 'premium' && post.giveawayData.prizeAmount > 0) {
-          const winner = await User.findById(winnerId);
           if (winner) {
             const premiumExpiresAt = new Date();
             premiumExpiresAt.setDate(premiumExpiresAt.getDate() + post.giveawayData.prizeAmount);
@@ -772,7 +773,25 @@ const checkExpiredGiveaways = async () => {
           }
         }
         
-        console.log(`[GIVEAWAY AUTO] Розыгрыш ${post._id} автоматически завершен. Победитель: ${winnerId}`);
+        // Получаем обновленный пост с популированным winner
+        const Post = require('./models/Post');
+        const updatedPost = await Post.findById(post._id)
+          .populate('author', 'username displayName avatar premium')
+          .populate('giveawayData.winner', 'username displayName avatar')
+          .lean();
+        
+        // Отправляем real-time обновление
+        const io = require('./index').io;
+        if (io) {
+          io.to('posts').emit('giveawayCompleted', {
+            postId: post._id.toString(),
+            winner: winner,
+            participantsCount: post.giveawayData.participants.length,
+            updatedPost: updatedPost
+          });
+        }
+        
+        console.log(`[GIVEAWAY AUTO] Розыгрыш ${post._id} автоматически завершен. Победитель: ${winner?.username || winnerId}`);
       } else {
         // Если нет участников, просто помечаем как завершенный
         post.giveawayData.isCompleted = true;

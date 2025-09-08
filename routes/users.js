@@ -157,6 +157,7 @@ router.get('/:id/posts', isAuth, async (req, res) => {
     const posts = await Post.find({ author: req.params.id })
       .sort({ createdAt: -1 })
       .populate('author', 'username displayName avatar premium')
+      .populate('giveawayData.winner', 'username displayName avatar')
       .lean();
 
     // Получаем репосты пользователя
@@ -165,10 +166,16 @@ router.get('/:id/posts', isAuth, async (req, res) => {
       .populate('repostedBy', 'username displayName avatar premium')
       .populate({
         path: 'originalPost',
-        populate: {
-          path: 'author',
-          select: 'username displayName avatar premium'
-        }
+        populate: [
+          {
+            path: 'author',
+            select: 'username displayName avatar premium'
+          },
+          {
+            path: 'giveawayData.winner',
+            select: 'username displayName avatar'
+          }
+        ]
       })
       .lean();
 
