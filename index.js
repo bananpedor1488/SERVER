@@ -396,6 +396,7 @@ const callRoutes = require('./routes/calls'); // Добавляем роуты �
 const pointsRoutes = require('./routes/points'); // Добавляем роуты для баллов
 const phoneVerificationRoutes = require('./routes/phoneVerification');
 const adminRoutes = require('./routes/admin'); // Добавляем роуты для админ-панели
+const setupRoutes = require('./routes/setup'); // Добавляем роуты для настройки
 
 // Middleware для преобразования JWT в req.session.user для совместимости со старым кодом
 const jwtToSession = (req, res, next) => {
@@ -413,6 +414,7 @@ app.use('/api/calls', authenticateToken, jwtToSession, callRoutes); // Доба�
 app.use('/api/points', authenticateToken, jwtToSession, pointsRoutes); // Добавляем роуты баллов
 app.use('/api/phone-verification', authenticateToken, jwtToSession, phoneVerificationRoutes); // Добавляем роуты верификации телефона
 app.use('/api/admin', adminRoutes); // Добавляем роуты админ-панели (уже с middleware внутри)
+app.use('/api/setup', setupRoutes); // Добавляем роуты настройки (без авторизации)
 
 // Роут для проверки текущего пользователя с JWT
 app.get('/api/me', authenticateToken, async (req, res) => {
