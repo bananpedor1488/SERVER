@@ -26,7 +26,7 @@ npm run create-admin
 
 ### Запрос:
 ```bash
-curl -X POST http://localhost:5000/api/setup/create-first-admin \
+curl -X POST http://localhost:3000/api/setup/create-first-admin \
   -H "Content-Type: application/json" \
   -d '{
     "username": "admin",

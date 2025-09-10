@@ -178,7 +178,7 @@ async function uploadFileToDropbox(fileBuffer, fileName, mimeType) {
     console.log('Файл успешно загружен в Dropbox:', uploadResult.result);
 
     // Вместо создания публичной ссылки, возвращаем путь для скачивания через наш API
-    const downloadUrl = `https://server-pqqy.onrender.com/api/files/download/${encodeURIComponent(dropboxPath)}`;
+    const downloadUrl = `https://server-1-ewdd.onrender.com/api/files/download/${encodeURIComponent(dropboxPath)}`;
 
     console.log(`URL для скачивания через API: ${downloadUrl}`);
 

@@ -156,7 +156,8 @@ const authenticateToken = (req, res, next) => {
       });
     }
 
-    console.log('Token verified for user:', user.username);
+    console.log('Token verified for user:', user);
+    console.log('User ID from token:', user.id);
     req.user = user;
     next();
   });
@@ -413,7 +414,7 @@ app.use('/api/messages', authenticateToken, jwtToSession, messageRoutes); // Д�
 app.use('/api/calls', authenticateToken, jwtToSession, callRoutes); // Добавляем роуты звонков
 app.use('/api/points', authenticateToken, jwtToSession, pointsRoutes); // Добавляем роуты баллов
 app.use('/api/phone-verification', authenticateToken, jwtToSession, phoneVerificationRoutes); // Добавляем роуты верификации телефона
-app.use('/api/admin', adminRoutes); // Добавляем роуты админ-панели (уже с middleware внутри)
+app.use('/api/admin', authenticateToken, jwtToSession, adminRoutes); // Добавляем роуты админ-панели с JWT middleware
 app.use('/api/setup', setupRoutes); // Добавляем роуты настройки (без авторизации)
 
 // Роут для проверки текущего пользователя с JWT

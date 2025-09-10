@@ -10,6 +10,7 @@ const router = express.Router();
 const generateTokens = (user) => {
   const payload = {
     id: user._id.toString(),
+    _id: user._id.toString(), // Добавляем _id для совместимости
     username: user.username,
     email: user.email,
     role: user.role || 'user'
