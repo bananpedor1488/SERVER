@@ -225,15 +225,15 @@ struct SongView: View {
         }
         
         print("=== SONG AUDIO ===")
-        print("song.audioURL = '\(song.audioURL)'")
+        print("song.id = '\(song.id)'")
         print("song.title = '\(song.title)'")
         print("===================")
         
-        if !song.audioURL.isEmpty {
+        if !song.id.isEmpty {
             print("Calling audioPlayer.loadAudio()")
-            audioPlayer.loadAudio(from: song.audioURL)
+            audioPlayer.loadAudio(from: song.id)
         } else {
-            print("WARNING: audioURL is EMPTY!")
+            print("WARNING: song.id is EMPTY!")
         }
     }
     
