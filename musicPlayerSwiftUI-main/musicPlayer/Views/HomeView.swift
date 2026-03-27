@@ -1,19 +1,15 @@
 import SwiftUI
 
-import SwiftUI
-
 struct SongTypeView: View {
     var title: String
-    var imageName: String
 
     var body: some View {
         ZStack {
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 150, height: 150)
-                .clipped()
-                .cornerRadius(20)
+            LinearGradient(
+                colors: [.purple, .blue],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
 
             Color.black.opacity(0.4)
                 .cornerRadius(20)
@@ -42,7 +38,7 @@ struct SongTypesListView: View {
                     HStack(spacing: 20) {
                         ForEach(SongType.allCases, id: \.self) { songType in
                             NavigationLink(destination: SongListView(songType: songType).environmentObject(mediaPlayerState)) {
-                                SongTypeView(title: songType.rawValue, imageName: songType.rawValue)
+                                SongTypeView(title: songType.rawValue)
                             }
                         }
                     }
@@ -59,7 +55,7 @@ struct SongTypesListView: View {
                     HStack(spacing: 20) {
                         ForEach(SongType.allCases.reversed(), id: \.self) { songType in
                             NavigationLink(destination: SongListView(songType: songType).environmentObject(mediaPlayerState)) {
-                                SongTypeView(title: songType.rawValue, imageName: songType.rawValue)
+                                SongTypeView(title: songType.rawValue)
                             }
                         }
                     }
@@ -73,18 +69,13 @@ struct SongTypesListView: View {
 
 struct HomeView: View {
     @EnvironmentObject var mediaPlayerState: MediaPlayerState
+    @StateObject private var viewModel = SongViewModel()
     
     var body: some View {
         NavigationView {
-            ZStack {
-                Image("background")
-                    .resizable()
-                    .scaledToFill()
-                    .edgesIgnoringSafeArea(.all)
-                    .opacity(0.3)
-                
+            ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    
+                    trendingSection
                     
                     SongTypesListView()
                         .environmentObject(mediaPlayerState)
@@ -93,7 +84,86 @@ struct HomeView: View {
                 }
                 .padding()
             }
+            .background(
+                Image("background")
+                    .resizable()
+                    .scaledToFill()
+                    .opacity(0.3)
+                    .ignoresSafeArea()
+            )
         }
-        .accentColor(.red)
+        .accentColor(.purple)
+        .onAppear {
+            viewModel.fetchTrending()
+        }
+    }
+
+    private var trendingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Trending Now")
+                .font(.title)
+                .bold()
+
+            if viewModel.isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.vertical, 20)
+            } else if let error = viewModel.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.caption)
+            } else {
+                ForEach(viewModel.songs.prefix(5)) { song in
+                    TrendingSongRow(song: song)
+                        .onTapGesture {
+                            mediaPlayerState.currentSong = song
+                            mediaPlayerState.isMediaPlayerShown = true
+                            mediaPlayerState.isMediaPlayerExpanded = true
+                        }
+                }
+            }
+        }
+    }
+}
+
+struct TrendingSongRow: View {
+    var song: Song
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: song.imageURL)) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 50, height: 50)
+                    .cornerRadius(8)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 50, height: 50)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(song.title)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Text(song.displayName)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Image(systemName: "play.circle.fill")
+                .font(.title2)
+                .foregroundColor(.purple)
+        }
+        .padding(.vertical, 4)
     }
 }
