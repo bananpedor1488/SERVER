@@ -22,7 +22,7 @@ struct TagSongData: Codable {
     }
 }
 
-struct Song: Codable {
+struct Song: Codable, Identifiable {
     let id: String
     let videoURL: String
     let audioURL: String
