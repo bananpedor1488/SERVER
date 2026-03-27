@@ -350,13 +350,11 @@ struct SongView: View {
             return .success
         }
         
-        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+        commandCenter.changePlaybackPositionCommand.addTarget { event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else {
                 return .commandFailed
             }
-            Task { @MainActor in
-                self?.audioManager.seek(to: event.positionTime)
-            }
+            audioManager.seek(to: event.positionTime)
             return .success
         }
     }
