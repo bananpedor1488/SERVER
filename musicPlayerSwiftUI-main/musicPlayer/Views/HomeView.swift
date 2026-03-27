@@ -34,7 +34,7 @@ struct SongTypesListView: View {
     var body: some View {
         VStack(spacing: 100) {
             VStack(alignment: .leading) {
-                Text("Today’s Biggest Hits")
+                Text("Today's Biggest Hits")
                     .font(.title)
                     .bold()
                     .padding(.leading)
@@ -97,4 +97,3 @@ struct HomeView: View {
         .accentColor(.red)
     }
 }
-

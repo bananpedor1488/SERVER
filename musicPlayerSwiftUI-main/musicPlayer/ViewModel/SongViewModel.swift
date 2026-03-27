@@ -1,28 +1,92 @@
-import Combine
 import Foundation
 
 final class SongViewModel: ObservableObject {
     @Published var songs: [Song] = []
     @Published var errorMessage: String?
+    @Published var isLoading: Bool = false
 
-    private var cancellables = Set<AnyCancellable>()
-    private let networkService = NetworkService.shared
+    private let api = APIClient()
 
     func fetchSongs(songType: SongType) {
-        let songsRequest = FetchSongsRequest(songType: songType)
+        isLoading = true
+        errorMessage = nil
 
-        networkService.request(songsRequest)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                switch completion {
-                case .finished:
-                    break
-                case .failure(let error):
-                    self.errorMessage = error.localizedDescription
-                }
-            }, receiveValue: { (response: ApiResponse) in
-                self.songs = response.result.tagSong.result
-            })
-            .store(in: &cancellables)
+        Task { @MainActor in
+            do {
+                let response: SearchResponse = try await api.requestJSON(
+                    "/api/search",
+                    queryParams: ["q": songType.rawValue],
+                    decode: SearchResponse.self
+                )
+                self.songs = response.results.map { self.trackToSong($0) }
+            } catch {
+                self.errorMessage = error.localizedDescription
+            }
+            self.isLoading = false
+        }
+    }
+
+    func fetchTrending() {
+        isLoading = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                let response: SearchResponse = try await api.requestJSON(
+                    "/api/search",
+                    queryParams: ["q": "trending music"],
+                    decode: SearchResponse.self
+                )
+                self.songs = response.results.map { self.trackToSong($0) }
+            } catch {
+                self.errorMessage = error.localizedDescription
+            }
+            self.isLoading = false
+        }
+    }
+
+    func fetchPopular() {
+        isLoading = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                let response: SearchResponse = try await api.requestJSON(
+                    "/api/search",
+                    queryParams: ["q": "popular songs"],
+                    decode: SearchResponse.self
+                )
+                self.songs = response.results.map { self.trackToSong($0) }
+            } catch {
+                self.errorMessage = error.localizedDescription
+            }
+            self.isLoading = false
+        }
+    }
+
+    private func trackToSong(_ track: Track) -> Song {
+        Song(
+            id: track.id,
+            videoURL: "",
+            audioURL: track.streamUrl ?? "",
+            imageURL: track.thumbnail ?? "",
+            imageLargeURL: track.artwork ?? track.thumbnail ?? "",
+            isVideoPending: false,
+            majorModelVersion: "",
+            modelName: track.genre ?? "",
+            isLiked: false,
+            userID: track.artistId,
+            displayName: track.artist,
+            handle: track.artistId,
+            isHandleUpdated: false,
+            avatarImageURL: "",
+            isTrashed: false,
+            createdAt: "",
+            status: "",
+            title: track.title,
+            playCount: track.playbackCount ?? 0,
+            upvoteCount: track.likesCount ?? 0,
+            isPublic: true
+        )
     }
 }
