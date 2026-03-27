@@ -48,8 +48,11 @@ public struct APIClient {
         }
 
         do {
+            let responseString = String(data: data, encoding: .utf8) ?? "nil"
+            print("DEBUG API Response: \(responseString.prefix(500))")
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
+            print("DEBUG Decode Error: \(error)")
             throw APIError(message: "Failed to decode response: \(error.localizedDescription)")
         }
     }
