@@ -68,7 +68,7 @@ final class SongViewModel: ObservableObject {
         return Song(
             id: track.id,
             videoURL: "",
-            audioURL: audioURL,
+            audioURL: track.streamUrl ?? "",
             imageURL: track.thumbnail ?? "",
             imageLargeURL: track.artwork ?? track.thumbnail ?? "",
             isVideoPending: false,
