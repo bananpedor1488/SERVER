@@ -8,6 +8,7 @@ struct TabBarView: View {
 
     @EnvironmentObject var mediaPlayerState: MediaPlayerState
     @EnvironmentObject var auth: AuthStore
+    @StateObject private var audioManager = AudioPlayerManager.shared
 
     var body: some View {
         ZStack {
@@ -46,11 +47,6 @@ struct TabBarView: View {
                         Spacer()
                         SongView()
                             .frame(height: 60)
-                            .onTapGesture {
-                                withAnimation(.spring()) {
-                                    mediaPlayerState.isMediaPlayerExpanded = true
-                                }
-                            }
                             .environmentObject(mediaPlayerState)
                         Spacer()
                             .frame(height: 80)
@@ -70,6 +66,7 @@ struct SearchTabView: View {
     @State private var searchResults: [Song] = []
     @State private var isSearching = false
     @State private var hasSearched = false
+    @StateObject private var audioManager = AudioPlayerManager.shared
     
     private let api = APIClient()
 
@@ -106,12 +103,17 @@ struct SearchTabView: View {
         List(searchResults, id: \.id) { song in
             SongRowView(song: song, isLiked: .constant(song.isLiked))
                 .onTapGesture {
-                    mediaPlayerState.currentSong = song
-                    mediaPlayerState.isMediaPlayerShown = true
-                    mediaPlayerState.isMediaPlayerExpanded = true
+                    playSong(song)
                 }
         }
         .listStyle(PlainListStyle())
+    }
+
+    private func playSong(_ song: Song) {
+        mediaPlayerState.currentSong = song
+        mediaPlayerState.isMediaPlayerShown = true
+        mediaPlayerState.isMediaPlayerExpanded = true
+        audioManager.loadAudio(from: song.id)
     }
 
     private func performSearch(query: String) {
@@ -171,6 +173,7 @@ struct SearchTabView: View {
 struct LibraryView: View {
     @EnvironmentObject var mediaPlayerState: MediaPlayerState
     @EnvironmentObject var auth: AuthStore
+    @StateObject private var audioManager = AudioPlayerManager.shared
 
     var body: some View {
         NavigationStack {
@@ -199,13 +202,11 @@ struct LibraryView: View {
                     .foregroundColor(.gray)
                     .padding(.vertical, 20)
             } else {
-                ForEach(auth.likedTracks.prefix(5), id: \.id) { track in
+                ForEach(auth.likedTracks, id: \.id) { track in
                     let song = trackToSong(track)
                     SongRowView(song: song, isLiked: .constant(true))
                         .onTapGesture {
-                            mediaPlayerState.currentSong = song
-                            mediaPlayerState.isMediaPlayerShown = true
-                            mediaPlayerState.isMediaPlayerExpanded = true
+                            playSong(song)
                         }
                 }
             }
@@ -254,6 +255,14 @@ struct LibraryView: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(.vertical, 60)
+    }
+
+    private func playSong(_ song: Song) {
+        mediaPlayerState.currentSong = song
+        mediaPlayerState.isMediaPlayerShown = true
+        mediaPlayerState.isMediaPlayerExpanded = true
+        
+        audioManager.loadAudio(from: song.id)
     }
 
     private func trackToSong(_ track: Track) -> Song {

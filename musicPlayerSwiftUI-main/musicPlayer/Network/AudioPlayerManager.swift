@@ -2,7 +2,10 @@ import AVFoundation
 import Combine
 import Foundation
 
-class AudioPlayer: ObservableObject {
+@MainActor
+class AudioPlayerManager: ObservableObject {
+    static let shared = AudioPlayerManager()
+    
     private var player: AVPlayer?
     private var timeObserverToken: Any?
     
@@ -10,23 +13,31 @@ class AudioPlayer: ObservableObject {
     @Published var duration: Double = 0
     @Published var isPlaying: Bool = false
     @Published var isAudioLoaded: Bool = false
+    @Published var isShuffleEnabled: Bool = false
+    @Published var repeatMode: RepeatMode = .none
+    @Published var currentTrackId: String = ""
     
     private var cancellables = Set<AnyCancellable>()
     private let api = APIClient()
     
-    @Published var isShuffleEnabled: Bool = false
-    @Published var repeatMode: RepeatMode = .none
+    var progress: Double {
+        guard duration > 0 else { return 0 }
+        return currentTime / duration
+    }
+
+    private init() {}
 
     func loadAudio(from trackId: String) {
-        print("AudioPlayer: Loading track \(trackId)")
+        print("AudioPlayerManager: Loading track \(trackId)")
         
-        Task { @MainActor in
+        currentTrackId = trackId
+        
+        Task {
             await sendPlayCommand(trackId: trackId)
         }
         
-        // Play directly via server proxy
         let streamURL = "\(AppConfig.apiBaseURL)/api/audio/stream/soundcloud/\(trackId)"
-        print("AudioPlayer: Stream URL: \(streamURL)")
+        print("AudioPlayerManager: Stream URL: \(streamURL)")
         setupPlayerWithProxy(streamURL)
     }
     
@@ -48,19 +59,19 @@ class AudioPlayer: ObservableObject {
                 body: body,
                 decode: PlayResponse.self
             )
-            print("AudioPlayer: Play command sent")
+            print("AudioPlayerManager: Play command sent")
         } catch {
-            print("AudioPlayer: Play command error - \(error)")
+            print("AudioPlayerManager: Play command error - \(error)")
         }
     }
     
     private func setupPlayerWithProxy(_ urlString: String) {
         guard let url = URL(string: urlString) else {
-            print("AudioPlayer: Invalid URL")
+            print("AudioPlayerManager: Invalid URL")
             return
         }
         
-        print("AudioPlayer: Setting up player with: \(url)")
+        print("AudioPlayerManager: Setting up player with: \(url)")
         
         cleanup()
         
@@ -78,14 +89,14 @@ class AudioPlayer: ObservableObject {
         playerItem.publisher(for: \.status)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
-                print("AudioPlayer status: \(status)")
+                print("AudioPlayerManager status: \(status)")
                 switch status {
                 case .readyToPlay:
                     self?.duration = playerItem.duration.seconds
                     self?.isAudioLoaded = true
-                    print("AudioPlayer: READY!")
+                    print("AudioPlayerManager: READY!")
                 case .failed:
-                    print("AudioPlayer FAILED: \(playerItem.error?.localizedDescription ?? "unknown")")
+                    print("AudioPlayerManager FAILED: \(playerItem.error?.localizedDescription ?? "unknown")")
                     self?.isAudioLoaded = false
                 default:
                     break
@@ -126,7 +137,7 @@ class AudioPlayer: ObservableObject {
                 decode: NextResponse.self
             )
         } catch {
-            print("AudioPlayer: Next command error - \(error)")
+            print("AudioPlayerManager: Next command error - \(error)")
         }
     }
     
@@ -168,7 +179,7 @@ class AudioPlayer: ObservableObject {
                 decode: PauseResponse.self
             )
         } catch {
-            print("AudioPlayer: Pause error - \(error)")
+            print("AudioPlayerManager: Pause error - \(error)")
         }
     }
     
@@ -195,7 +206,7 @@ class AudioPlayer: ObservableObject {
                 decode: ResumeResponse.self
             )
         } catch {
-            print("AudioPlayer: Resume error - \(error)")
+            print("AudioPlayerManager: Resume error - \(error)")
         }
     }
     
@@ -221,7 +232,7 @@ class AudioPlayer: ObservableObject {
                 decode: SeekResponse.self
             )
         } catch {
-            print("AudioPlayer: Seek error - \(error)")
+            print("AudioPlayerManager: Seek error - \(error)")
         }
     }
     
@@ -249,7 +260,7 @@ class AudioPlayer: ObservableObject {
                 decode: PreviousResponse.self
             )
         } catch {
-            print("AudioPlayer: Previous error - \(error)")
+            print("AudioPlayerManager: Previous error - \(error)")
         }
     }
     
@@ -272,7 +283,7 @@ class AudioPlayer: ObservableObject {
                 decode: ShuffleResponse.self
             )
         } catch {
-            print("AudioPlayer: Shuffle error - \(error)")
+            print("AudioPlayerManager: Shuffle error - \(error)")
         }
     }
     
@@ -295,16 +306,7 @@ class AudioPlayer: ObservableObject {
                 decode: RepeatResponse.self
             )
         } catch {
-            print("AudioPlayer: Repeat error - \(error)")
+            print("AudioPlayerManager: Repeat error - \(error)")
         }
-    }
-    
-    var progress: Double {
-        guard duration > 0 else { return 0 }
-        return currentTime / duration
-    }
-    
-    deinit {
-        cleanup()
     }
 }

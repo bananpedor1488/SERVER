@@ -70,6 +70,7 @@ struct SongTypesListView: View {
 struct HomeView: View {
     @EnvironmentObject var mediaPlayerState: MediaPlayerState
     @StateObject private var viewModel = SongViewModel()
+    @StateObject private var audioManager = AudioPlayerManager.shared
     
     var body: some View {
         NavigationView {
@@ -119,13 +120,18 @@ struct HomeView: View {
                 ForEach(viewModel.songs.prefix(5)) { song in
                     TrendingSongRow(song: song)
                         .onTapGesture {
-                            mediaPlayerState.currentSong = song
-                            mediaPlayerState.isMediaPlayerShown = true
-                            mediaPlayerState.isMediaPlayerExpanded = true
+                            playSong(song)
                         }
                 }
             }
         }
+    }
+    
+    private func playSong(_ song: Song) {
+        mediaPlayerState.currentSong = song
+        mediaPlayerState.isMediaPlayerShown = true
+        mediaPlayerState.isMediaPlayerExpanded = true
+        audioManager.loadAudio(from: song.id)
     }
 }
 
