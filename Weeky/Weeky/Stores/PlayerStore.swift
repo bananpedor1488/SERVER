@@ -94,6 +94,8 @@ public final class PlayerStore: ObservableObject {
         currentTime = 0
         duration = 0
 
+        cancellables.removeAll()
+
         guard let streamUrlString = track.streamUrl,
               let streamURL = URL(string: streamUrlString) else {
             isLoading = false
@@ -165,15 +167,12 @@ public final class PlayerStore: ObservableObject {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
+        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: item)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
                 self?.handleTrackEnded()
             }
-        }
+            .store(in: &cancellables)
     }
 
     private func handleTrackEnded() {
@@ -213,14 +212,20 @@ public final class PlayerStore: ObservableObject {
     }
 
     func togglePlayPause() {
-        isPlaying.toggle()
+        if isPlaying {
+            pause()
+        } else {
+            play()
+        }
     }
 
     func play() {
+        player?.play()
         isPlaying = true
     }
 
     func pause() {
+        player?.pause()
         isPlaying = false
     }
 
@@ -236,11 +241,12 @@ public final class PlayerStore: ObservableObject {
                 loadAndPlay(track)
             }
         }
+
     }
 
     func previous() {
         if currentTime > 3 {
-            currentTime = 0
+            seek(to: 0)
         } else if currentIndex > 0 {
             currentIndex -= 1
             if let track = nowPlaying {
@@ -253,15 +259,13 @@ public final class PlayerStore: ObservableObject {
             }
         }
     }
-    func currentIndex; 	-=; 1
-        } else if repeatMode == .all && !queue.isEmpty {
-            currentIndex = queue.count - 1
-        }
-        // In a real app, we would load and play the previous track here
-    }
 
     func seek(to time: Double) {
-        currentTime = min(max(0, time), effectiveTotalDuration)
+        let clamped = min(max(0, time), effectiveTotalDuration)
+        currentTime = clamped
+
+        let cmTime = CMTime(seconds: clamped, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     func seekByProgress(_ progress: Double) {
