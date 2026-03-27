@@ -9,31 +9,16 @@ struct SongView: View {
     @EnvironmentObject var mediaPlayerState: MediaPlayerState
     @StateObject private var audioPlayer = AudioPlayer()
     @State private var isSliderEditing = false
-    @State private var dragOffset: CGFloat = 0
     @State private var lastSongId: String = ""
     
     var body: some View {
         ZStack {
-            AsyncImage(url: URL(string: song.imageLargeURL)) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .blur(radius: 30)
-                        .overlay(Color.black.opacity(0.5))
-                default:
-                    Color.black
-                }
-            }
-            .ignoresSafeArea()
+            backgroundView
             
-            Group {
-                if mediaPlayerState.isMediaPlayerExpanded {
-                    expandedPlayerView
-                } else {
-                    miniPlayerView
-                }
+            if mediaPlayerState.isMediaPlayerExpanded {
+                expandedPlayerView
+            } else {
+                miniPlayerView
             }
         }
         .onChange(of: song.id) { _, newId in
@@ -50,75 +35,62 @@ struct SongView: View {
         }
     }
     
-    private var expandedPlayerView: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 20) {
-                RoundedRectangle(cornerRadius: 3)
-                    .frame(width: 50, height: 5)
-                    .foregroundColor(Color.gray.opacity(0.7))
-                    .padding(.top, 10)
-                    .padding(.bottom, 150)
-                    .offset(y: dragOffset)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.6), value: dragOffset)
-                
-                Spacer()
-                
-                AsyncImage(url: URL(string: song.imageLargeURL)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 250, height: 250)
-                            .clipShape(Circle())
-                            .shadow(radius: 10)
-                    default:
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 250, height: 250)
-                    }
-                }
-                .transition(.scale)
-                
-                VStack(spacing: 10) {
-                    Text(song.title)
-                        .font(.title3)
-                        .bold()
-                        .foregroundColor(.white)
-                        .transition(.opacity)
-                    
-                    Text(song.displayName)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                
-                progressView
-                
-                playbackControls
-                
-                Spacer()
+    private var backgroundView: some View {
+        AsyncImage(url: URL(string: song.imageLargeURL)) { phase in
+            switch phase {
+            case .success(let image):
+                image
+                    .resizable()
+                    .scaledToFill()
+            default:
+                Color.purple.opacity(0.8)
             }
-            .padding()
-            .offset(y: dragOffset)
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        dragOffset = min(value.translation.height, geometry.size.height / 2)
-                    }
-                    .onEnded { value in
-                        if value.translation.height > geometry.size.height / 4 {
-                            withAnimation(.spring()) {
-                                dragOffset = geometry.size.height
-                                mediaPlayerState.isMediaPlayerExpanded.toggle()
-                            }
-                        } else {
-                            withAnimation(.spring()) {
-                                dragOffset = 0
-                            }
-                        }
-                    }
-            )
         }
+        .blur(radius: 30)
+        .overlay(Color.black.opacity(0.6))
+        .ignoresSafeArea()
+    }
+    
+    private var expandedPlayerView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            AsyncImage(url: URL(string: song.imageLargeURL)) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                }
+            }
+            .frame(width: 280, height: 280)
+            .clipShape(Circle())
+            .shadow(radius: 20)
+            
+            VStack(spacing: 8) {
+                Text(song.title)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                
+                Text(song.displayName)
+                    .font(.body)
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal)
+            
+            progressView
+            
+            playbackControls
+            
+            Spacer()
+        }
+        .padding()
     }
     
     private var progressView: some View {
@@ -134,40 +106,38 @@ struct SongView: View {
                     }
                 }
                 .tint(.white)
-                .padding(.horizontal)
                 
                 HStack {
                     Text(timeString(for: audioPlayer.currentTime))
                         .font(.caption)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.white.opacity(0.7))
                     Spacer()
                     Text(timeString(for: audioPlayer.duration))
                         .font(.caption)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.white.opacity(0.7))
                 }
-                .padding(.horizontal)
             } else {
-                if audioPlayer.isAudioLoaded == false && !song.audioURL.isEmpty {
+                if !song.audioURL.isEmpty {
                     ProgressView()
                         .tint(.white)
-                    Text("Loading audio...")
+                    Text("Loading...")
                         .font(.caption)
-                        .foregroundColor(.gray)
-                } else if song.audioURL.isEmpty {
-                    Text("No audio available")
-                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                } else {
+                    Text("No audio")
                         .foregroundColor(.red)
                 }
             }
         }
+        .padding(.horizontal)
     }
     
     private var playbackControls: some View {
-        HStack(spacing: 30) {
+        HStack(spacing: 50) {
             Button(action: { }) {
                 Image(systemName: "backward.fill")
                     .font(.title)
-                    .foregroundStyle(.white)
+                    .foregroundColor(.white)
             }
             
             Button(action: {
@@ -177,66 +147,73 @@ struct SongView: View {
                     audioPlayer.togglePlayback()
                 }
             }) {
-                Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.white)
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 70, height: 70)
+                    
+                    Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title)
+                        .foregroundColor(.black)
+                }
             }
             
             Button(action: { }) {
                 Image(systemName: "forward.fill")
                     .font(.title)
-                    .foregroundStyle(.white)
+                    .foregroundColor(.white)
             }
         }
-        .padding(.vertical)
-        .transition(.move(edge: .bottom))
     }
     
     private var miniPlayerView: some View {
-        HStack {
+        HStack(spacing: 12) {
             AsyncImage(url: URL(string: song.imageLargeURL)) { phase in
                 switch phase {
                 case .success(let image):
                     image
                         .resizable()
-                        .frame(width: 40, height: 40)
-                        .clipShape(Circle())
-                        .shadow(radius: 5)
+                        .scaledToFill()
                 default:
                     Circle()
                         .fill(Color.gray.opacity(0.3))
-                        .frame(width: 40, height: 40)
                 }
             }
+            .frame(width: 50, height: 50)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
             
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.subheadline)
-                    .bold()
+                    .fontWeight(.semibold)
                     .foregroundColor(.white)
                     .lineLimit(1)
+                
                 Text(song.displayName)
                     .font(.caption)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.white.opacity(0.7))
                     .lineLimit(1)
             }
             
             Spacer()
             
             Button(action: {
-                if isSliderEditing {
-                    audioPlayer.play()
-                } else {
-                    audioPlayer.togglePlayback()
-                }
+                audioPlayer.togglePlayback()
             }) {
                 Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title)
-                    .foregroundStyle(.white)
+                    .font(.title2)
+                    .foregroundColor(.white)
             }
         }
-        .padding()
-        .transition(.blurReplace)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [.purple.opacity(0.8), .blue.opacity(0.8)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
     }
     
     private func setupAudio() {
@@ -244,26 +221,19 @@ struct SongView: View {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Audio session setup failed.")
+            print("Audio session setup failed: \(error)")
         }
         
-        print("Loading audio from: \(song.audioURL)")
+        print("Loading audio: \(song.audioURL)")
         
         if !song.audioURL.isEmpty {
             audioPlayer.loadAudio(from: song.audioURL)
-        } else {
-            print("ERROR: audioURL is empty!")
         }
     }
     
     private func timeString(for seconds: Double) -> String {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
-        return String(format: "%02d:%02d", mins, secs)
+        return String(format: "%d:%02d", mins, secs)
     }
-}
-
-#Preview {
-    SongView()
-        .environmentObject(MediaPlayerState())
 }

@@ -38,23 +38,24 @@ struct TabBarView: View {
             .accentColor(.purple)
             
             if mediaPlayerState.isMediaPlayerShown {
-                VStack {
+                if mediaPlayerState.isMediaPlayerExpanded {
                     SongView()
-                        .frame(height: mediaPlayerState.isMediaPlayerExpanded ? nil : 60)
-                        .cornerRadius(mediaPlayerState.isMediaPlayerExpanded ? 40 : 15)
-                        .padding(.horizontal, mediaPlayerState.isMediaPlayerExpanded ? 0 : 5)
-                        .padding(.bottom, mediaPlayerState.isMediaPlayerExpanded ? -20 : 40)
-                        .padding(.top, mediaPlayerState.isMediaPlayerExpanded ? 60 : 40)
-                        .onTapGesture {
-                            withAnimation(.spring()) {
-                                mediaPlayerState.isMediaPlayerExpanded.toggle()
-                            }
-                        }
                         .environmentObject(mediaPlayerState)
+                } else {
+                    VStack {
+                        Spacer()
+                        SongView()
+                            .frame(height: 60)
+                            .onTapGesture {
+                                withAnimation(.spring()) {
+                                    mediaPlayerState.isMediaPlayerExpanded = true
+                                }
+                            }
+                            .environmentObject(mediaPlayerState)
+                        Spacer()
+                            .frame(height: 80)
+                    }
                 }
-                .frame(maxHeight: .infinity, alignment: mediaPlayerState.isMediaPlayerExpanded ? .top : .bottom)
-                .padding(.bottom)
-                .ignoresSafeArea(edges: mediaPlayerState.isMediaPlayerExpanded ? .all : .top)
             }
         }
         .sheet(isPresented: $auth.authSheetPresented) {
