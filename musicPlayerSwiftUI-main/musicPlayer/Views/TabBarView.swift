@@ -293,12 +293,17 @@ struct PlaylistRowView: View {
                     .frame(width: 50, height: 50)
 
                 if let url = playlist.coverURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 50, height: 50)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 50, height: 50)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        default:
+                            EmptyView()
+                        }
                     }
                 } else {
                     Image(systemName: "music.note.list")
@@ -349,10 +354,15 @@ struct ProfileView: View {
     private var profileHeader: some View {
         VStack(spacing: 12) {
             if let avatarURL = auth.me?.avatar, let url = URL(string: avatarURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    default:
+                        EmptyView()
+                    }
                 }
                 .frame(width: 100, height: 100)
                 .clipShape(Circle())
