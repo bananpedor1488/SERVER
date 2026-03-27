@@ -41,6 +41,22 @@ public final class PlayerStore: ObservableObject {
         }
     }
 
+    private func resolvedStreamURL(from urlString: String) -> URL? {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let absolute = URL(string: trimmed), absolute.scheme != nil {
+            return absolute
+        }
+
+        let withoutLeadingSlash = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
+        var base = AppConfig.apiBaseURL
+        if base.path != "/" {
+            base.deleteLastPathComponent()
+        }
+        return base.appendingPathComponent(withoutLeadingSlash)
+    }
+
     var nowPlaying: Track? {
         guard currentIndex >= 0 && currentIndex < queue.count else { return nil }
         return queue[currentIndex]
@@ -97,7 +113,7 @@ public final class PlayerStore: ObservableObject {
         cancellables.removeAll()
 
         guard let streamUrlString = track.streamUrl,
-              let streamURL = URL(string: streamUrlString) else {
+              let streamURL = resolvedStreamURL(from: streamUrlString) else {
             isLoading = false
             errorMessage = "Stream URL not available"
             return
@@ -112,6 +128,28 @@ public final class PlayerStore: ObservableObject {
         let playerItem = AVPlayerItem(url: streamURL)
         player = AVPlayer(playerItem: playerItem)
         player?.automaticallyWaitsToMinimizeStalling = true
+
+        if let player {
+            player.publisher(for: \.timeControlStatus)
+                .receive(on: DispatchQueue.main)
+                .sink { status in
+                    if status == .paused, self.isPlaying, self.errorMessage == nil, self.nowPlaying?.id == track.id {
+                        player.play()
+                    }
+                }
+                .store(in: &cancellables)
+
+            if #available(iOS 10.0, *) {
+                player.publisher(for: \.reasonForWaitingToPlay)
+                    .receive(on: DispatchQueue.main)
+                    .sink { reason in
+                        if let reason {
+                            print("AVPlayer waiting reason: \(reason.rawValue)")
+                        }
+                    }
+                    .store(in: &cancellables)
+            }
+        }
 
         setupTimeObserver()
         setupPlayerItemObserver(playerItem, track: track)
@@ -138,6 +176,9 @@ public final class PlayerStore: ObservableObject {
                 switch status {
                 case .readyToPlay:
                     self.isLoading = false
+                    if self.isPlaying {
+                        self.player?.play()
+                    }
                     let assetDuration = item.asset.duration.seconds
                     if assetDuration.isFinite && assetDuration > 0 {
                         self.duration = assetDuration
@@ -148,6 +189,9 @@ public final class PlayerStore: ObservableObject {
                     self.isLoading = false
                     self.errorMessage = item.error?.localizedDescription ?? "Playback failed"
                     self.duration = track.duration > 0 ? Double(track.duration) : 0
+                    if let err = item.error {
+                        print("AVPlayerItem failed: \(err)")
+                    }
                 default:
                     break
                 }
