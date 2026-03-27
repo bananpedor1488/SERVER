@@ -224,10 +224,16 @@ struct SongView: View {
             print("Audio session setup failed: \(error)")
         }
         
-        print("Loading audio: \(song.audioURL)")
+        print("=== SONG AUDIO ===")
+        print("song.audioURL = '\(song.audioURL)'")
+        print("song.title = '\(song.title)'")
+        print("===================")
         
         if !song.audioURL.isEmpty {
+            print("Calling audioPlayer.loadAudio()")
             audioPlayer.loadAudio(from: song.audioURL)
+        } else {
+            print("WARNING: audioURL is EMPTY!")
         }
     }
     

@@ -65,11 +65,12 @@ final class SongViewModel: ObservableObject {
     }
 
     private func trackToSong(_ track: Track) -> Song {
-        print("DEBUG: Track - id: \(track.id), title: \(track.title)")
-        print("DEBUG: streamUrl: \(track.streamUrl ?? "nil")")
+        print("DEBUG Track: id=\(track.id), title=\(track.title)")
+        print("DEBUG: streamUrl='\(track.streamUrl ?? "nil")'")
+        print("DEBUG: url='\(track.url ?? "nil")'")
         
         let audioURL = track.streamUrl ?? track.url ?? ""
-        print("DEBUG: audioURL: \(audioURL)")
+        print("DEBUG: FINAL audioURL='\(audioURL)'")
         
         return Song(
             id: track.id,
