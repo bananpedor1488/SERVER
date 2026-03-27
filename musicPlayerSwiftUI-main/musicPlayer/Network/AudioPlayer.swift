@@ -5,7 +5,6 @@ import Foundation
 class AudioPlayer: ObservableObject {
     private var player: AVPlayer?
     private var timeObserverToken: Any?
-    private var currentURL: URL?
     
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
@@ -14,39 +13,29 @@ class AudioPlayer: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     private let api = APIClient()
-    
-    private var sessionId: String {
-        let key = "weeky-session-id"
-        if let existing = UserDefaults.standard.string(forKey: key), existing.count > 6 {
-            return existing
-        }
-        let sid = UUID().uuidString
-        UserDefaults.standard.set(sid, forKey: key)
-        return sid
-    }
 
-    func loadAudio(from trackId: String, type: String = "sc") {
-        print("AudioPlayer: Loading track \(trackId) type: \(type)")
+    func loadAudio(from trackId: String) {
+        print("AudioPlayer: Loading track \(trackId)")
         
-        // First, send play command to server
         Task { @MainActor in
-            await sendPlayCommand(trackId: trackId, type: type)
+            await sendPlayCommand(trackId: trackId)
         }
         
-        // Then get stream URL
-        getStreamURL()
+        // Play directly via server proxy
+        let streamURL = "\(AppConfig.apiBaseURL)/api/audio/stream/soundcloud/\(trackId)"
+        print("AudioPlayer: Stream URL: \(streamURL)")
+        setupPlayerWithProxy(streamURL)
     }
     
-    private func sendPlayCommand(trackId: String, type: String) async {
+    private func sendPlayCommand(trackId: String) async {
         struct PlayResponse: Codable {
             let success: Bool
-            let error: String?
         }
         
         do {
             let body = try JSONSerialization.data(withJSONObject: [
-                "track": ["id": trackId],
-                "queue": [["id": trackId]],
+                "track": ["id": trackId, "type": "soundcloud"],
+                "queue": [["id": trackId, "type": "soundcloud"]],
                 "index": 0
             ], options: [])
             
@@ -56,64 +45,24 @@ class AudioPlayer: ObservableObject {
                 body: body,
                 decode: PlayResponse.self
             )
-            
             print("AudioPlayer: Play command sent")
         } catch {
             print("AudioPlayer: Play command error - \(error)")
         }
     }
     
-    private func getStreamURL() {
-        Task { @MainActor in
-            struct StreamResponse: Codable {
-                let success: Bool
-                let streamUrl: String?
-                let error: String?
-            }
-            
-            do {
-                let response: StreamResponse = try await api.requestJSON(
-                    "/api/audio/stream/current?sid=\(sessionId)",
-                    decode: StreamResponse.self
-                )
-                
-                if response.success, let urlString = response.streamUrl {
-                    print("AudioPlayer: Got stream URL: \(urlString)")
-                    await MainActor.run {
-                        self.setupPlayerWithURL(urlString)
-                    }
-                } else {
-                    print("AudioPlayer: Stream error - \(response.error ?? "unknown")")
-                }
-            } catch {
-                print("AudioPlayer: getStreamURL error - \(error)")
-            }
-        }
-    }
-    
-    private func setupPlayerWithURL(_ urlString: String) {
-        // Handle relative URLs
-        var finalURL: URL
-        if urlString.hasPrefix("/") {
-            finalURL = AppConfig.apiBaseURL.appendingPathComponent(String(urlString.dropFirst()))
-        } else if let absolute = URL(string: urlString) {
-            finalURL = absolute
-        } else {
+    private func setupPlayerWithProxy(_ urlString: String) {
+        guard let url = URL(string: urlString) else {
             print("AudioPlayer: Invalid URL")
             return
         }
         
-        print("AudioPlayer: Setting up player with: \(finalURL)")
+        print("AudioPlayer: Setting up player with: \(url)")
         
         cleanup()
         
-        var request = URLRequest(url: finalURL)
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
-        request.setValue("anonymous", forHTTPHeaderField: "Access-Control-Request-Headers")
-        
-        let asset = AVURLAsset(url: finalURL)
+        let asset = AVURLAsset(url: url)
         let playerItem = AVPlayerItem(asset: asset)
-        
         player = AVPlayer(playerItem: playerItem)
         player?.automaticallyWaitsToMinimizeStalling = true
         
@@ -159,7 +108,6 @@ class AudioPlayer: ObservableObject {
     private func handlePlaybackEnded() {
         Task { @MainActor in
             await sendNextCommand()
-            getStreamURL()
         }
     }
     
@@ -217,7 +165,7 @@ class AudioPlayer: ObservableObject {
                 decode: PauseResponse.self
             )
         } catch {
-            print("AudioPlayer: Pause command error - \(error)")
+            print("AudioPlayer: Pause error - \(error)")
         }
     }
     
@@ -244,7 +192,7 @@ class AudioPlayer: ObservableObject {
                 decode: ResumeResponse.self
             )
         } catch {
-            print("AudioPlayer: Resume command error - \(error)")
+            print("AudioPlayer: Resume error - \(error)")
         }
     }
     
@@ -270,7 +218,7 @@ class AudioPlayer: ObservableObject {
                 decode: SeekResponse.self
             )
         } catch {
-            print("AudioPlayer: Seek command error - \(error)")
+            print("AudioPlayer: Seek error - \(error)")
         }
     }
     
